@@ -36,6 +36,7 @@ const App = () => (
           <Route path="/admin/sessions/new" element={<AdminAuthGuard><AdminNewSessionScreen /></AdminAuthGuard>} />
           <Route path="/admin/sessions/:id/setup" element={<AdminAuthGuard><AdminSetupScreen /></AdminAuthGuard>} />
           <Route path="/admin/sessions/:id/lobby" element={<AdminAuthGuard><AdminLobbyScreen /></AdminAuthGuard>} />
+          <Route path="/admin/sessions/:id/pitch" element={<AdminAuthGuard><AdminPitchScreen /></AdminAuthGuard>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
