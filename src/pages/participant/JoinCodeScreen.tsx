@@ -4,15 +4,40 @@ import { motion } from "framer-motion";
 import { Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function JoinCodeScreen() {
   const [code, setCode] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleJoin = () => {
-    if (code.trim().length > 0) {
-      navigate(`/join/${code.toUpperCase()}`);
+  const handleJoin = async () => {
+    const trimmed = code.trim().toUpperCase();
+    if (!trimmed) return;
+    setError("");
+    setLoading(true);
+
+    const { data, error: err } = await supabase
+      .from("sessions")
+      .select("*")
+      .ilike("join_code", trimmed)
+      .single();
+
+    setLoading(false);
+
+    if (err || !data) {
+      console.error("Session lookup failed:", err);
+      setError("Session not found. Check the code and try again.");
+      return;
     }
+
+    if (data.status === "setup") {
+      setError("Session hasn't started yet. Ask the organiser to activate it.");
+      return;
+    }
+
+    navigate(`/join/${data.join_code}`);
   };
 
   return (
@@ -38,18 +63,19 @@ export default function JoinCodeScreen() {
         <div className="w-full space-y-4">
           <Input
             value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase().slice(0, 6))}
+            onChange={(e) => { setCode(e.target.value.toUpperCase().slice(0, 6)); setError(""); }}
             placeholder="ABC123"
             className="text-center text-2xl font-heading font-bold tracking-[0.2em] h-14 bg-card"
             onKeyDown={(e) => e.key === "Enter" && handleJoin()}
           />
+          {error && <p className="text-destructive text-sm text-center">{error}</p>}
           <Button
             onClick={handleJoin}
-            disabled={code.trim().length === 0}
+            disabled={code.trim().length === 0 || loading}
             className="w-full h-12 text-base font-semibold"
             size="lg"
           >
-            Join Session
+            {loading ? "Checking…" : "Join Session"}
           </Button>
         </div>
       </motion.div>

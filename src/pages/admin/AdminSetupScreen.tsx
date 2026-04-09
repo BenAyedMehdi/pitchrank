@@ -1,39 +1,111 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Trash2, Plus, Lock } from "lucide-react";
+import { Trash2, Plus, Lock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 
 export default function AdminSetupScreen() {
   const navigate = useNavigate();
-  const [teams, setTeams] = useState(["Team Alpha", "Team Beta", "Team Gamma"]);
+  const { id } = useParams<{ id: string }>();
+  const [session, setSession] = useState<Tables<"sessions"> | null>(null);
+  const [teams, setTeams] = useState<Tables<"teams">[]>([]);
   const [newTeam, setNewTeam] = useState("");
-  const [status, setStatus] = useState<"setup" | "active">("setup");
-  const isActive = status === "active";
+  const [loading, setLoading] = useState(true);
+  const [activating, setActivating] = useState(false);
 
-  const addTeam = () => {
-    if (newTeam.trim() && !isActive) {
-      setTeams([...teams, newTeam.trim()]);
-      setNewTeam("");
+  const isActive = session?.status !== "setup";
+
+  useEffect(() => {
+    if (!id) return;
+    async function load() {
+      const [sessionRes, teamsRes] = await Promise.all([
+        supabase.from("sessions").select("*").eq("id", id!).single(),
+        supabase.from("teams").select("*").eq("session_id", id!).order("pitch_order"),
+      ]);
+      if (sessionRes.error) {
+        console.error("Failed to load session:", sessionRes.error);
+        toast.error("Session not found");
+        return;
+      }
+      setSession(sessionRes.data);
+      setTeams(teamsRes.data || []);
+      setLoading(false);
     }
+    load();
+  }, [id]);
+
+  const addTeam = async () => {
+    if (!newTeam.trim() || isActive || !id) return;
+    const { data, error } = await supabase
+      .from("teams")
+      .insert({ session_id: id, name: newTeam.trim(), pitch_order: teams.length })
+      .select()
+      .single();
+    if (error) {
+      console.error("Failed to add team:", error);
+      toast.error("Failed to add team");
+      return;
+    }
+    setTeams([...teams, data]);
+    setNewTeam("");
   };
 
-  const removeTeam = (index: number) => {
-    if (!isActive) {
-      setTeams(teams.filter((_, i) => i !== index));
+  const removeTeam = async (teamId: string) => {
+    if (isActive) return;
+    const { error } = await supabase.from("teams").delete().eq("id", teamId);
+    if (error) {
+      console.error("Failed to delete team:", error);
+      toast.error("Failed to delete team");
+      return;
     }
+    setTeams(teams.filter((t) => t.id !== teamId));
   };
 
-  const handleActivate = () => {
-    setStatus("active");
+  const handleActivate = async () => {
+    if (!id) return;
+    setActivating(true);
+    const { error } = await supabase
+      .from("sessions")
+      .update({ status: "active" })
+      .eq("id", id);
+    if (error) {
+      console.error("Failed to activate:", error);
+      toast.error("Failed to activate session");
+      setActivating(false);
+      return;
+    }
+    setSession((prev) => prev ? { ...prev, status: "active" } : prev);
+    setActivating(false);
     toast.success("Session activated!");
   };
 
+  if (loading) {
+    return (
+      <AdminSessionLayout>
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      </AdminSessionLayout>
+    );
+  }
+
+  const statusMap = (s: string | undefined) => {
+    if (s === "setup") return "setup" as const;
+    if (s === "active") return "active" as const;
+    return "closed" as const;
+  };
+
   return (
-    <AdminSessionLayout status={status}>
+    <AdminSessionLayout
+      sessionName={session?.name}
+      sessionCode={session?.join_code}
+      status={statusMap(session?.status)}
+    >
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -59,16 +131,16 @@ export default function AdminSetupScreen() {
           <div className="space-y-2">
             {teams.map((team, i) => (
               <motion.div
-                key={i}
+                key={team.id}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: i * 0.05 }}
                 className="flex items-center justify-between bg-card rounded-xl border px-4 py-3"
               >
-                <span className="text-sm font-medium">{team}</span>
+                <span className="text-sm font-medium">{team.name}</span>
                 {!isActive && (
                   <button
-                    onClick={() => removeTeam(i)}
+                    onClick={() => removeTeam(team.id)}
                     className="text-muted-foreground hover:text-destructive transition-colors p-1"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -105,15 +177,16 @@ export default function AdminSetupScreen() {
           {!isActive ? (
             <Button
               onClick={handleActivate}
-              disabled={teams.length < 2}
+              disabled={teams.length < 2 || activating}
               className="w-full h-12 text-base font-semibold bg-success hover:bg-success/90"
               size="lg"
             >
+              {activating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Activate Session
             </Button>
           ) : (
             <Button
-              onClick={() => navigate("/admin/sessions/1/lobby")}
+              onClick={() => navigate(`/admin/sessions/${id}/lobby`)}
               className="w-full h-12 text-base font-semibold"
               size="lg"
             >
