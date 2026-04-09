@@ -14,13 +14,177 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      participants: {
+        Row: {
+          id: string
+          is_observer: boolean
+          joined_at: string
+          name: string
+          session_id: string
+          team_id: string | null
+        }
+        Insert: {
+          id?: string
+          is_observer?: boolean
+          joined_at?: string
+          name: string
+          session_id: string
+          team_id?: string | null
+        }
+        Update: {
+          id?: string
+          is_observer?: boolean
+          joined_at?: string
+          name?: string
+          session_id?: string
+          team_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "participants_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "participants_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      sessions: {
+        Row: {
+          created_at: string
+          current_pitch_index: number
+          id: string
+          join_code: string
+          name: string
+          status: string
+          timer_started_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          current_pitch_index?: number
+          id?: string
+          join_code?: string
+          name: string
+          status?: string
+          timer_started_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          current_pitch_index?: number
+          id?: string
+          join_code?: string
+          name?: string
+          status?: string
+          timer_started_at?: string | null
+        }
+        Relationships: []
+      }
+      teams: {
+        Row: {
+          id: string
+          name: string
+          pitch_order: number
+          session_id: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          pitch_order?: number
+          session_id: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          pitch_order?: number
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "teams_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      votes: {
+        Row: {
+          id: string
+          participant_id: string
+          pitch_index: number
+          score_functionality: number
+          score_innovation: number
+          score_pitch: number
+          score_technicality: number
+          session_id: string
+          submitted_at: string
+          team_id: string
+          total_score: number | null
+        }
+        Insert: {
+          id?: string
+          participant_id: string
+          pitch_index: number
+          score_functionality: number
+          score_innovation: number
+          score_pitch: number
+          score_technicality: number
+          session_id: string
+          submitted_at?: string
+          team_id: string
+          total_score?: number | null
+        }
+        Update: {
+          id?: string
+          participant_id?: string
+          pitch_index?: number
+          score_functionality?: number
+          score_innovation?: number
+          score_pitch?: number
+          score_technicality?: number
+          session_id?: string
+          submitted_at?: string
+          team_id?: string
+          total_score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "votes_participant_id_fkey"
+            columns: ["participant_id"]
+            isOneToOne: false
+            referencedRelation: "participants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "votes_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "votes_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_join_code: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never
