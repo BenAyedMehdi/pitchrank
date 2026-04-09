@@ -13,6 +13,7 @@ import AdminSessionsScreen from "./pages/admin/AdminSessionsScreen";
 import AdminNewSessionScreen from "./pages/admin/AdminNewSessionScreen";
 import AdminSetupScreen from "./pages/admin/AdminSetupScreen";
 import AdminLobbyScreen from "./pages/admin/AdminLobbyScreen";
+import AdminPitchScreen from "./pages/admin/AdminPitchScreen";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
