@@ -34,7 +34,7 @@
 | B1 | Admin selects a team and marks their pitch as started | 🔴 | [x] |
 | B2 | Starting a pitch opens the voting form on all participant screens | 🔴 | [x] |
 | B3 | Admin triggers 1-min timer — countdown appears on all screens simultaneously | 🔴 | [x] |
-| B4 | Admin sees in real time who has voted and who hasn't for current pitch | 🔴 | [~] |
+| B4 | Admin sees in real time who has voted and who hasn't for current pitch | 🔴 | [x] |
 | B5 | Admin sees vote count, percentage, and pending voter list | 🔴 | [~] |
 | B6 | Admin closes voting for current team | 🔴 | [ ] |
 | B7 | Admin advances to next team | 🔴 | [ ] |

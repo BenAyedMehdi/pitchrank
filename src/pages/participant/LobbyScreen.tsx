@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Zap } from "lucide-react";
 import { getParticipant } from "@/lib/participantStore";
 import { getParticipantRoute } from "@/lib/sessionRouting";
+import { shouldRouteToVote } from "@/lib/voteRouting";
+import { consumeLastVotedTeam } from "@/lib/voteFlash";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -11,6 +13,8 @@ export default function LobbyScreen() {
   const navigate = useNavigate();
   const participant = getParticipant();
   const [sessionName, setSessionName] = useState(participant?.sessionName || "");
+  const teamsRef = useRef<Tables<"teams">[]>([]);
+  const [lastVotedTeamName] = useState<string | null>(() => consumeLastVotedTeam());
 
   useEffect(() => {
     if (!participant) {
@@ -18,19 +22,53 @@ export default function LobbyScreen() {
       return;
     }
 
+    const hasVotedForCurrentPitch = async (sessionRow: Tables<"sessions">) => {
+      let currentTeam = teamsRef.current.find((team) => team.pitch_order === sessionRow.current_pitch_index);
+      if (!currentTeam && sessionRow.current_pitch_index >= 0) {
+        const { data } = await supabase
+          .from("teams")
+          .select("*")
+          .eq("session_id", sessionRow.id)
+          .eq("pitch_order", sessionRow.current_pitch_index)
+          .maybeSingle();
+        currentTeam = data ?? undefined;
+      }
+      if (!currentTeam) return false;
+
+      const { data, error } = await supabase
+        .from("votes")
+        .select("id")
+        .eq("session_id", sessionRow.id)
+        .eq("participant_id", participant.id)
+        .eq("team_id", currentTeam.id)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Failed to check vote status in lobby:", error);
+        return false;
+      }
+
+      return Boolean(data);
+    };
+
     const syncSession = async () => {
-      const { data } = await supabase
-        .from("sessions")
-        .select("*")
-        .eq("id", participant.sessionId)
-        .single();
+      const [sessionRes, teamsRes] = await Promise.all([
+        supabase
+          .from("sessions")
+          .select("*")
+          .eq("id", participant.sessionId)
+          .single(),
+        supabase.from("teams").select("*").eq("session_id", participant.sessionId).order("pitch_order"),
+      ]);
 
-      if (!data) return;
+      if (!sessionRes.data) return;
 
-      setSessionName(data.name);
+      setSessionName(sessionRes.data.name);
+      teamsRef.current = teamsRes.data || [];
 
-      const nextRoute = getParticipantRoute(data);
-      if (nextRoute !== "/lobby") {
+      const nextRoute = getParticipantRoute(sessionRes.data);
+      const votedForCurrentPitch = await hasVotedForCurrentPitch(sessionRes.data);
+      if (shouldRouteToVote(nextRoute, votedForCurrentPitch)) {
         navigate(nextRoute);
       }
     };
@@ -49,13 +87,19 @@ export default function LobbyScreen() {
           filter: `id=eq.${participant.sessionId}`,
         },
         (payload) => {
+          if (!participant) return;
           const updated = payload.new as Tables<"sessions">;
           setSessionName(updated.name);
 
-          const nextRoute = getParticipantRoute(updated);
-          if (nextRoute !== "/lobby") {
-            navigate(nextRoute);
-          }
+          const handle = async () => {
+            const nextRoute = getParticipantRoute(updated);
+            const votedForCurrentPitch = await hasVotedForCurrentPitch(updated);
+            if (shouldRouteToVote(nextRoute, votedForCurrentPitch)) {
+              navigate(nextRoute);
+            }
+          };
+
+          void handle();
         }
       )
       .subscribe();
@@ -81,7 +125,11 @@ export default function LobbyScreen() {
 
         <div className="space-y-2">
           <h1 className="font-heading text-2xl font-bold">You're in, {participant.name}!</h1>
-          <p className="text-muted-foreground">Waiting for the session to start…</p>
+          <p className="text-muted-foreground">
+            {lastVotedTeamName
+              ? `You voted for ${lastVotedTeamName}. Wait until the admin starts the next voting session.`
+              : "Waiting for the session to start…"}
+          </p>
         </div>
 
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

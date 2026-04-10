@@ -111,20 +111,18 @@ export default function AdminPitchScreen() {
   const pitchSelected = session?.status === "active" && activePitchIndex >= 0;
   const timerRemaining = getSecondsRemaining(session?.timer_started_at ?? null, nowMs);
   const votingRunning = session ? isVotingOpen(session, nowMs) : false;
-  const currentPitchTeam = votingRunning
-    ? teams.find((team) => team.pitch_order === activePitchIndex) ?? null
-    : null;
+  const currentPitchTeam = teams.find((team) => team.pitch_order === activePitchIndex) ?? null;
 
   const eligibleVoters = useMemo(() => {
-    if (!selectedTeamRow) return [];
-    return participants.filter((p) => p.is_observer || p.team_id !== selectedTeamRow.id);
-  }, [participants, selectedTeamRow]);
+    if (!currentPitchTeam) return [];
+    return participants.filter((p) => p.is_observer || p.team_id !== currentPitchTeam.id);
+  }, [participants, currentPitchTeam]);
 
   const votedIds = useMemo(() => {
-    if (!selectedTeamRow) return new Set<string>();
-    const teamVotes = votes.filter((v) => v.team_id === selectedTeamRow.id);
+    if (!currentPitchTeam) return new Set<string>();
+    const teamVotes = votes.filter((v) => v.team_id === currentPitchTeam.id);
     return new Set(teamVotes.map((v) => v.participant_id));
-  }, [votes, selectedTeamRow]);
+  }, [votes, currentPitchTeam]);
 
   const visibleVoters = useMemo(() => {
     const search = filter.trim().toLowerCase();
@@ -339,7 +337,9 @@ export default function AdminPitchScreen() {
           <div className="space-y-5 lg:col-span-8">
             {/* Section 3 — Voter Tracking */}
             <Card className="p-4 md:p-5 space-y-4">
-              <h3 className="font-heading text-sm font-semibold">Voter status</h3>
+              <h3 className="font-heading text-sm font-semibold">
+                Voter status{currentPitchTeam ? ` · ${currentPitchTeam.name}` : ""}
+              </h3>
 
               {/* Summary */}
               <div className="space-y-2">
@@ -368,6 +368,11 @@ export default function AdminPitchScreen() {
 
               {/* Voter list */}
               <div className="max-h-[420px] overflow-y-auto space-y-1.5 -mx-1 px-1">
+                {!currentPitchTeam ? (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    No active pitch. Start a pitch to track who has voted.
+                  </div>
+                ) : null}
                 {visibleVoters.map((voter, i) => (
                   <motion.div
                     key={voter.id}

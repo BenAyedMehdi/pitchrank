@@ -1,11 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
+import { Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { getParticipant } from "@/lib/participantStore";
 import { getParticipantRoute } from "@/lib/sessionRouting";
 import { getSecondsRemaining } from "@/lib/timer";
+import { shouldRouteToVote } from "@/lib/voteRouting";
+import { setLastVotedTeam } from "@/lib/voteFlash";
+import {
+  isCompleteVote,
+  mapScoresToCriteriaScores,
+  mapScoresToVoteColumns,
+  normalizeCriteriaLabels,
+} from "@/lib/voting";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import { toast } from "sonner";
 
 export default function VoteScreen() {
   const navigate = useNavigate();
@@ -13,7 +25,29 @@ export default function VoteScreen() {
 
   const [session, setSession] = useState<Tables<"sessions"> | null>(null);
   const [teams, setTeams] = useState<Tables<"teams">[]>([]);
+  const teamsRef = useRef<Tables<"teams">[]>([]);
+  const [scores, setScores] = useState<Array<number | null>>([]);
+  const [alreadyVoted, setAlreadyVoted] = useState(false);
+  const [checkingVote, setCheckingVote] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
+
+  const hasVotedForTeam = async (sessionId: string, participantId: string, teamId: string) => {
+    const { data, error } = await supabase
+      .from("votes")
+      .select("id")
+      .eq("session_id", sessionId)
+      .eq("participant_id", participantId)
+      .eq("team_id", teamId)
+      .maybeSingle();
+
+    if (error) {
+      console.error("Failed to check existing vote:", error);
+      return false;
+    }
+
+    return Boolean(data);
+  };
 
   useEffect(() => {
     if (!participant) {
@@ -38,8 +72,24 @@ export default function VoteScreen() {
         return;
       }
 
+      const currentPitchTeam = (teamsRes.data || []).find(
+        (team) => team.pitch_order === sessionRes.data.current_pitch_index,
+      );
+      if (currentPitchTeam) {
+        const alreadyVotedForPitch = await hasVotedForTeam(
+          sessionRes.data.id,
+          participant.id,
+          currentPitchTeam.id,
+        );
+        if (!shouldRouteToVote(nextRoute, alreadyVotedForPitch)) {
+          navigate("/lobby");
+          return;
+        }
+      }
+
       setSession(sessionRes.data);
       setTeams(teamsRes.data || []);
+      teamsRef.current = teamsRes.data || [];
     };
 
     void loadSession();
@@ -55,13 +105,30 @@ export default function VoteScreen() {
           filter: `id=eq.${participant.sessionId}`,
         },
         (payload) => {
+          if (!participant) return;
           const updated = payload.new as Tables<"sessions">;
           const nextRoute = getParticipantRoute(updated);
           if (nextRoute !== "/vote") {
             navigate(nextRoute);
             return;
           }
-          setSession(updated);
+          const handle = async () => {
+            const teamId = teamsRef.current.find((team) => team.pitch_order === updated.current_pitch_index)?.id;
+            if (!teamId) {
+              setSession(updated);
+              return;
+            }
+
+            const alreadyVotedForPitch = await hasVotedForTeam(updated.id, participant.id, teamId);
+            if (!shouldRouteToVote(nextRoute, alreadyVotedForPitch)) {
+              navigate("/lobby");
+              return;
+            }
+
+            setSession(updated);
+          };
+
+          void handle();
         }
       )
       .subscribe();
@@ -75,6 +142,10 @@ export default function VoteScreen() {
     if (!session || teams.length === 0 || session.current_pitch_index < 0) return null;
     return teams.find((team) => team.pitch_order === session.current_pitch_index) || null;
   }, [session, teams]);
+  const criteriaLabels = normalizeCriteriaLabels(session?.criteria_labels);
+  const criteriaDisplayLabels = criteriaLabels.map((label, index) => (label.length > 0 ? label : `Criteria ${index + 1}`));
+  const isOwnTeamPitch = !!participant && !!currentPitch && !participant.isObserver && participant.teamId === currentPitch.id;
+  const canSubmit = isCompleteVote(scores, criteriaLabels.length) && !alreadyVoted && !isOwnTeamPitch && !submitting;
   const timerRemaining = getSecondsRemaining(session?.timer_started_at ?? null, nowMs);
   const timerRunning = timerRemaining > 0;
 
@@ -93,6 +164,73 @@ export default function VoteScreen() {
       navigate(nextRoute);
     }
   }, [navigate, nowMs, session]);
+
+  useEffect(() => {
+    setScores(Array(criteriaLabels.length).fill(null));
+  }, [session?.id, session?.current_pitch_index, criteriaLabels.length]);
+
+  useEffect(() => {
+    if (!participant || !session || !currentPitch) return;
+
+    let cancelled = false;
+    setCheckingVote(true);
+
+    supabase
+      .from("votes")
+      .select("id")
+      .eq("session_id", session.id)
+      .eq("participant_id", participant.id)
+      .eq("team_id", currentPitch.id)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) {
+          console.error("Failed to check existing vote:", error);
+          setAlreadyVoted(false);
+          setCheckingVote(false);
+          return;
+        }
+        setAlreadyVoted(Boolean(data));
+        setCheckingVote(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [participant, session, currentPitch]);
+
+  const setScore = (criteriaIndex: number, value: number) => {
+    setScores((prev) => prev.map((score, i) => (i === criteriaIndex ? value : score)));
+  };
+
+  const submitVote = async () => {
+    if (!participant || !session || !currentPitch || !canSubmit) return;
+
+    setSubmitting(true);
+    const mappedScores = mapScoresToVoteColumns(scores);
+    const criteriaScores = mapScoresToCriteriaScores(scores);
+    const { error } = await supabase.from("votes").insert({
+      session_id: session.id,
+      participant_id: participant.id,
+      team_id: currentPitch.id,
+      pitch_index: session.current_pitch_index,
+      criteria_scores: criteriaScores,
+      ...mappedScores,
+    });
+
+    if (error) {
+      console.error("Failed to submit vote:", error);
+      toast.error(error.message || "Failed to submit vote");
+      setSubmitting(false);
+      return;
+    }
+
+    setAlreadyVoted(true);
+    setSubmitting(false);
+    toast.success("Vote submitted");
+    setLastVotedTeam(currentPitch.name);
+    navigate("/lobby");
+  };
 
   if (!participant) return null;
 
@@ -117,14 +255,54 @@ export default function VoteScreen() {
         </div>
 
         <div className="rounded-2xl border bg-card p-5 space-y-4">
-          <p className="text-sm font-medium">Rate this pitch (1-5)</p>
-          <div className="space-y-3 text-sm text-muted-foreground">
-            <div className="rounded-lg border bg-background px-3 py-2">Technicality</div>
-            <div className="rounded-lg border bg-background px-3 py-2">Pitch quality</div>
-            <div className="rounded-lg border bg-background px-3 py-2">Functionality</div>
-            <div className="rounded-lg border bg-background px-3 py-2">Innovation</div>
-          </div>
-          <p className="text-xs text-muted-foreground">Scoring inputs and submission are implemented in the next story.</p>
+          {isOwnTeamPitch ? (
+            <p className="text-sm text-muted-foreground text-center py-2">
+              Your team is pitching now. Sit back and enjoy.
+            </p>
+          ) : (
+            <>
+              <p className="text-sm font-medium">Rate this pitch (1-5)</p>
+              <div className="space-y-4">
+                {criteriaDisplayLabels.map((label, criteriaIndex) => (
+                  <div key={`${label}-${criteriaIndex}`} className="space-y-2">
+                    <p className="text-sm font-medium">{label}</p>
+                    <div className="flex gap-2">
+                      {[1, 2, 3, 4, 5].map((value) => (
+                        <button
+                          key={value}
+                          onClick={() => setScore(criteriaIndex, value)}
+                          className={cn(
+                            "w-9 h-9 rounded-md border text-sm font-semibold transition-colors",
+                            scores[criteriaIndex] === value
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
+                          )}
+                          disabled={alreadyVoted || submitting}
+                        >
+                          {value}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                onClick={submitVote}
+                disabled={!canSubmit || checkingVote}
+                className="w-full h-11"
+              >
+                {(submitting || checkingVote) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {alreadyVoted ? "Vote already submitted" : "Submit vote"}
+              </Button>
+
+              {!alreadyVoted && !isCompleteVote(scores, criteriaLabels.length) ? (
+                <p className="text-xs text-muted-foreground">
+                  Please rate every criteria before submitting.
+                </p>
+              ) : null}
+            </>
+          )}
         </div>
       </motion.div>
     </div>
