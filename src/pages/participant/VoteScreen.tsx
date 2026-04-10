@@ -12,7 +12,6 @@ import { setLastVotedTeam } from "@/lib/voteFlash";
 import {
   isCompleteVote,
   mapScoresToCriteriaScores,
-  mapScoresToVoteColumns,
   normalizeCriteriaLabels,
 } from "@/lib/voting";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,7 +27,6 @@ export default function VoteScreen() {
   const teamsRef = useRef<Tables<"teams">[]>([]);
   const [scores, setScores] = useState<Array<number | null>>([]);
   const [alreadyVoted, setAlreadyVoted] = useState(false);
-  const [checkingVote, setCheckingVote] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
 
@@ -81,10 +79,13 @@ export default function VoteScreen() {
           participant.id,
           currentPitchTeam.id,
         );
+        setAlreadyVoted(alreadyVotedForPitch);
         if (!shouldRouteToVote(nextRoute, alreadyVotedForPitch)) {
           navigate("/lobby");
           return;
         }
+      } else {
+        setAlreadyVoted(false);
       }
 
       setSession(sessionRes.data);
@@ -120,6 +121,7 @@ export default function VoteScreen() {
             }
 
             const alreadyVotedForPitch = await hasVotedForTeam(updated.id, participant.id, teamId);
+            setAlreadyVoted(alreadyVotedForPitch);
             if (!shouldRouteToVote(nextRoute, alreadyVotedForPitch)) {
               navigate("/lobby");
               return;
@@ -169,36 +171,6 @@ export default function VoteScreen() {
     setScores(Array(criteriaLabels.length).fill(null));
   }, [session?.id, session?.current_pitch_index, criteriaLabels.length]);
 
-  useEffect(() => {
-    if (!participant || !session || !currentPitch) return;
-
-    let cancelled = false;
-    setCheckingVote(true);
-
-    supabase
-      .from("votes")
-      .select("id")
-      .eq("session_id", session.id)
-      .eq("participant_id", participant.id)
-      .eq("team_id", currentPitch.id)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (cancelled) return;
-        if (error) {
-          console.error("Failed to check existing vote:", error);
-          setAlreadyVoted(false);
-          setCheckingVote(false);
-          return;
-        }
-        setAlreadyVoted(Boolean(data));
-        setCheckingVote(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [participant, session, currentPitch]);
-
   const setScore = (criteriaIndex: number, value: number) => {
     setScores((prev) => prev.map((score, i) => (i === criteriaIndex ? value : score)));
   };
@@ -207,15 +179,12 @@ export default function VoteScreen() {
     if (!participant || !session || !currentPitch || !canSubmit) return;
 
     setSubmitting(true);
-    const mappedScores = mapScoresToVoteColumns(scores);
     const criteriaScores = mapScoresToCriteriaScores(scores);
     const { error } = await supabase.from("votes").insert({
       session_id: session.id,
       participant_id: participant.id,
       team_id: currentPitch.id,
-      pitch_index: session.current_pitch_index,
       criteria_scores: criteriaScores,
-      ...mappedScores,
     });
 
     if (error) {
@@ -289,17 +258,15 @@ export default function VoteScreen() {
 
               <Button
                 onClick={submitVote}
-                disabled={!canSubmit || checkingVote}
+                disabled={!canSubmit}
                 className="w-full h-11"
               >
-                {(submitting || checkingVote) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                 {alreadyVoted ? "Vote already submitted" : "Submit vote"}
               </Button>
 
               {!alreadyVoted && !isCompleteVote(scores, criteriaLabels.length) ? (
-                <p className="text-xs text-muted-foreground">
-                  Please rate every criteria before submitting.
-                </p>
+                <p className="text-xs text-muted-foreground">Please rate every criteria before submitting.</p>
               ) : null}
             </>
           )}

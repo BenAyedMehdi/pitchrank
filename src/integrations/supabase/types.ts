@@ -123,11 +123,6 @@ export type Database = {
           criteria_scores: number[]
           id: string
           participant_id: string
-          pitch_index: number
-          score_functionality: number | null
-          score_innovation: number | null
-          score_pitch: number | null
-          score_technicality: number | null
           session_id: string
           submitted_at: string
           team_id: string
@@ -137,11 +132,6 @@ export type Database = {
           criteria_scores: number[]
           id?: string
           participant_id: string
-          pitch_index: number
-          score_functionality?: number | null
-          score_innovation?: number | null
-          score_pitch?: number | null
-          score_technicality?: number | null
           session_id: string
           submitted_at?: string
           team_id: string
@@ -151,11 +141,6 @@ export type Database = {
           criteria_scores?: number[]
           id?: string
           participant_id?: string
-          pitch_index?: number
-          score_functionality?: number | null
-          score_innovation?: number | null
-          score_pitch?: number | null
-          score_technicality?: number | null
           session_id?: string
           submitted_at?: string
           team_id?: string

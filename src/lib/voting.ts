@@ -25,19 +25,6 @@ export function isCompleteVote(scores: Array<number | null>, criteriaCount: numb
   return scores.every((score) => typeof score === "number" && score >= 1 && score <= 5);
 }
 
-export function mapScoresToVoteColumns(scores: Array<number | null>) {
-  if (scores.some((score) => score !== null && (score < 1 || score > 5))) {
-    throw new Error("All criteria scores must be between 1 and 5.");
-  }
-
-  return {
-    score_technicality: (scores[0] ?? null) as number | null,
-    score_pitch: (scores[1] ?? null) as number | null,
-    score_functionality: (scores[2] ?? null) as number | null,
-    score_innovation: (scores[3] ?? null) as number | null,
-  };
-}
-
 export function mapScoresToCriteriaScores(scores: Array<number | null>): number[] {
   if (!isCompleteVote(scores, scores.length)) {
     throw new Error("All criteria must be rated between 1 and 5.");

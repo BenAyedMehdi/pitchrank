@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Timer, Lock, ArrowRight, CheckCircle2, Clock, Search, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
+import { Timer, Lock, ArrowRight, CheckCircle2, Clock, Search, ChevronDown, ChevronUp, BarChart3, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -74,7 +74,10 @@ export default function AdminPitchScreen() {
     if ((teamsRes.data || []).length > 0) {
       const idx = sessionRes.data.current_pitch_index;
       const maxIndex = (teamsRes.data || []).length - 1;
-      setSelectedTeam(idx >= 0 && idx <= maxIndex ? idx : 0);
+      setSelectedTeam((prev) => {
+        if (prev >= 0 && prev <= maxIndex) return prev;
+        return idx >= 0 && idx <= maxIndex ? idx : 0;
+      });
     }
   };
 
@@ -96,8 +99,9 @@ export default function AdminPitchScreen() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "participants", filter: `session_id=eq.${id}` }, () => {
         void loadData(id);
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "votes", filter: `session_id=eq.${id}` }, () => {
-        void loadData(id);
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "votes", filter: `session_id=eq.${id}` }, (payload) => {
+        const insertedVote = payload.new as Tables<"votes">;
+        setVotes((prev) => (prev.some((v) => v.id === insertedVote.id) ? prev : [...prev, insertedVote]));
       })
       .subscribe();
 
@@ -113,34 +117,38 @@ export default function AdminPitchScreen() {
   const votingRunning = session ? isVotingOpen(session, nowMs) : false;
   const currentPitchTeam = teams.find((team) => team.pitch_order === activePitchIndex) ?? null;
 
-  const eligibleVoters = useMemo(() => {
-    if (!currentPitchTeam) return [];
-    return participants.filter((p) => p.is_observer || p.team_id !== currentPitchTeam.id);
-  }, [participants, currentPitchTeam]);
+  const trackedTeam = selectedTeamRow ?? currentPitchTeam;
 
   const votedIds = useMemo(() => {
-    if (!currentPitchTeam) return new Set<string>();
-    const teamVotes = votes.filter((v) => v.team_id === currentPitchTeam.id);
+    if (!trackedTeam) return new Set<string>();
+    const teamVotes = votes.filter((v) => v.team_id === trackedTeam.id);
     return new Set(teamVotes.map((v) => v.participant_id));
-  }, [votes, currentPitchTeam]);
+  }, [votes, trackedTeam]);
 
-  const visibleVoters = useMemo(() => {
-    const search = filter.trim().toLowerCase();
-    const rows = eligibleVoters.map((p) => ({
+  const allVoterRows = useMemo(() => {
+    return participants.map((p) => ({
       id: p.id,
       name: p.name,
       team: p.is_observer ? "Observer" : (p.teams?.name ?? "No team"),
+      isTeamMember: Boolean(trackedTeam && !p.is_observer && p.team_id === trackedTeam.id),
       voted: votedIds.has(p.id),
     }));
+  }, [participants, trackedTeam, votedIds]);
+
+  const visibleVoters = useMemo(() => {
+    const search = filter.trim().toLowerCase();
+    const rows = allVoterRows;
     const filtered = search
       ? rows.filter((r) => r.name.toLowerCase().includes(search) || r.team.toLowerCase().includes(search))
       : rows;
     return filtered.sort((a, b) => Number(a.voted) - Number(b.voted));
-  }, [eligibleVoters, filter, votedIds]);
+  }, [allVoterRows, filter]);
 
-  const votedCount = visibleVoters.filter((v) => v.voted).length;
-  const totalVoters = visibleVoters.length;
+  const eligibleVoters = allVoterRows.filter((v) => !v.isTeamMember);
+  const votedCount = eligibleVoters.filter((v) => v.voted).length;
+  const totalVoters = eligibleVoters.length;
   const percentage = totalVoters === 0 ? 0 : Math.round((votedCount / totalVoters) * 100);
+  const teamMemberCount = allVoterRows.filter((v) => v.isTeamMember).length;
 
   const pitchesCompleted = session && session.current_pitch_index >= 0 ? session.current_pitch_index + 1 : 0;
   const activeStep = votingRunning ? 1 : 0;
@@ -338,7 +346,7 @@ export default function AdminPitchScreen() {
             {/* Section 3 — Voter Tracking */}
             <Card className="p-4 md:p-5 space-y-4">
               <h3 className="font-heading text-sm font-semibold">
-                Voter status{currentPitchTeam ? ` · ${currentPitchTeam.name}` : ""}
+                Voter status{trackedTeam ? ` · ${trackedTeam.name}` : ""}
               </h3>
 
               {/* Summary */}
@@ -351,6 +359,12 @@ export default function AdminPitchScreen() {
                     Not yet: {totalVoters - votedCount}
                   </span>
                 </div>
+                {teamMemberCount > 0 ? (
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <Users className="w-3 h-3" />
+                    {teamMemberCount} team member{teamMemberCount > 1 ? "s" : ""} excluded from voting count
+                  </div>
+                ) : null}
                 <Progress value={percentage} className="h-2" />
                 <p className="text-[10px] text-muted-foreground text-right">{percentage}%</p>
               </div>
@@ -368,9 +382,9 @@ export default function AdminPitchScreen() {
 
               {/* Voter list */}
               <div className="max-h-[420px] overflow-y-auto space-y-1.5 -mx-1 px-1">
-                {!currentPitchTeam ? (
+                {!trackedTeam ? (
                   <div className="py-8 text-center text-xs text-muted-foreground">
-                    No active pitch. Start a pitch to track who has voted.
+                    Select a team to see voter status.
                   </div>
                 ) : null}
                 {visibleVoters.map((voter, i) => (
@@ -392,11 +406,34 @@ export default function AdminPitchScreen() {
                         <p className="text-[10px] text-muted-foreground">{voter.team}</p>
                       </div>
                     </div>
-                    {voter.voted ? (
-                      <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                    ) : (
-                      <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {voter.isTeamMember ? (
+                        <>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border font-medium bg-yellow-100 text-yellow-900 border-yellow-300">
+                            Team-member
+                          </span>
+                          <Clock className="w-4 h-4 text-yellow-700" />
+                        </>
+                      ) : (
+                        <>
+                          <span
+                            className={cn(
+                              "text-[10px] px-2 py-0.5 rounded-full border font-medium",
+                              voter.voted
+                                ? "bg-success/10 text-success border-success/30"
+                                : "bg-muted text-muted-foreground border-border"
+                            )}
+                          >
+                            {voter.voted ? "Voted" : "Pending"}
+                          </span>
+                          {voter.voted ? (
+                            <CheckCircle2 className="w-4 h-4 text-success" />
+                          ) : (
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </>
+                      )}
+                    </div>
                   </motion.div>
                 ))}
               </div>

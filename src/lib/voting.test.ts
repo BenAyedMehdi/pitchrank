@@ -4,7 +4,6 @@ import {
   getCriteriaInputDefaults,
   isCompleteVote,
   mapScoresToCriteriaScores,
-  mapScoresToVoteColumns,
   normalizeCriteriaLabels,
 } from "./voting";
 
@@ -47,21 +46,6 @@ describe("isCompleteVote", () => {
     expect(isCompleteVote([1, 2, 3, 4], 4)).toBe(true);
     expect(isCompleteVote([0, 2, 3, 4], 4)).toBe(false);
     expect(isCompleteVote([6, 2, 3, 4], 4)).toBe(false);
-  });
-});
-
-describe("mapScoresToVoteColumns", () => {
-  it("maps available ordered scores to vote table columns and leaves rest null", () => {
-    expect(mapScoresToVoteColumns([5, 4])).toEqual({
-      score_technicality: 5,
-      score_pitch: 4,
-      score_functionality: null,
-      score_innovation: null,
-    });
-  });
-
-  it("throws when score is out of range", () => {
-    expect(() => mapScoresToVoteColumns([6, 4])).toThrow();
   });
 });
 
