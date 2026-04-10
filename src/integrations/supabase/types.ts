@@ -185,6 +185,10 @@ export type Database = {
     }
     Functions: {
       generate_join_code: { Args: never; Returns: string }
+      start_pitch: {
+        Args: { p_session_id: string; p_team_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
