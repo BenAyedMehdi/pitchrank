@@ -108,10 +108,12 @@ export default function AdminLobbyScreen() {
       sessionCode={session?.join_code}
       status={statusMap(session?.status)}
       isLive={session?.status === "active"}
+      containerClassName="max-w-[1200px]"
+      contentClassName="py-6 lg:py-8"
     >
       <div className="space-y-6">
         {/* Join code display */}
-        <div className="flex flex-col items-center gap-2 py-4">
+        <div className="rounded-2xl border bg-card flex flex-col items-center gap-2 py-5 md:py-6">
           <JoinCodeDisplay code={session?.join_code || "------"} size="lg" showCopyButton />
           <p className="text-xs text-muted-foreground text-center mt-2">
             Ask participants to open the app and enter this code
@@ -119,10 +121,15 @@ export default function AdminLobbyScreen() {
         </div>
 
         {/* Participant count */}
-        <div className="flex items-center gap-2 px-1">
-          <Users className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-medium">
-            Participants joined: {participants.length}
+        <div className="flex items-center justify-between gap-3 px-1">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-medium">
+              Participants joined: {participants.length}
+            </span>
+          </div>
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            Live updates enabled
           </span>
         </div>
 
@@ -133,14 +140,14 @@ export default function AdminLobbyScreen() {
             <p className="text-muted-foreground text-xs mt-1">Share the code above.</p>
           </div>
         ) : (
-          <div className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
             {participants.map((p, i) => (
               <motion.div
                 key={p.id}
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: i * 0.04 }}
-                className="flex items-center justify-between bg-card rounded-xl border px-4 py-3"
+                className="flex items-center justify-between bg-card rounded-xl border px-4 py-3 min-h-[76px]"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">

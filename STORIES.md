@@ -25,17 +25,17 @@
 
 ---
 
-## Phase 2 — Pitch control & voting 🟡 Next up
+## Phase 2 — Pitch control & voting 🟡 In progress
 
-### Admin — pitch control (static UI done, needs Supabase wiring)
+### Admin — pitch control (Supabase-backed, partial flow live)
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| B1 | Admin selects a team and marks their pitch as started | 🔴 | [~] |
+| B1 | Admin selects a team and marks their pitch as started | 🔴 | [x] |
 | B2 | Starting a pitch opens the voting form on all participant screens | 🔴 | [ ] |
 | B3 | Admin triggers 1-min timer — countdown appears on all screens simultaneously | 🔴 | [ ] |
-| B4 | Admin sees in real time who has voted and who hasn't for current pitch | 🔴 | [ ] |
-| B5 | Admin sees vote count, percentage, and pending voter list | 🔴 | [ ] |
+| B4 | Admin sees in real time who has voted and who hasn't for current pitch | 🔴 | [~] |
+| B5 | Admin sees vote count, percentage, and pending voter list | 🔴 | [~] |
 | B6 | Admin closes voting for current team | 🔴 | [ ] |
 | B7 | Admin advances to next team | 🔴 | [ ] |
 | B8 | Admin can pause or extend the timer | 🟡 | [ ] |
@@ -88,4 +88,14 @@
 |---|---|
 | Admin ← new participants joining | ✅ Live |
 | All clients ← session state changes | ✅ Wired, awaiting phase 2 transitions |
-| Admin ← new votes during pitch | ⬜ Phase 2 |
+| Admin ← new votes during pitch | ✅ Live on admin pitch screen |
+
+---
+
+## Feature branch updates (latest)
+
+- Connected project to real Supabase (env-based client + migrations pushed)
+- Added DB function `start_pitch(session_id, team_id)` and wired admin "Start Pitch" action via RPC
+- Replaced `AdminPitchScreen` mock data with live Supabase data (`sessions`, `teams`, `participants`, `votes`)
+- Added realtime refresh on admin pitch screen for session updates, new participants, and new votes
+- Improved desktop UX for `AdminPitchScreen` and `AdminLobbyScreen` with responsive wide layouts and multi-column cards
