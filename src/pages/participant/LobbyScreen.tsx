@@ -3,7 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Zap } from "lucide-react";
 import { getParticipant } from "@/lib/participantStore";
+import { getParticipantRoute } from "@/lib/sessionRouting";
 import { supabase } from "@/integrations/supabase/client";
+import type { Tables } from "@/integrations/supabase/types";
 
 export default function LobbyScreen() {
   const navigate = useNavigate();
@@ -16,17 +18,26 @@ export default function LobbyScreen() {
       return;
     }
 
-    // Fetch latest session name
-    supabase
-      .from("sessions")
-      .select("name")
-      .eq("id", participant.sessionId)
-      .single()
-      .then(({ data }) => {
-        if (data) setSessionName(data.name);
-      });
+    const syncSession = async () => {
+      const { data } = await supabase
+        .from("sessions")
+        .select("*")
+        .eq("id", participant.sessionId)
+        .single();
 
-    // Realtime subscription on session status changes
+      if (!data) return;
+
+      setSessionName(data.name);
+
+      const nextRoute = getParticipantRoute(data);
+      if (nextRoute !== "/lobby") {
+        navigate(nextRoute);
+      }
+    };
+
+    void syncSession();
+
+    // Realtime subscription on session state changes
     const channel = supabase
       .channel(`session-state-${participant.sessionId}`)
       .on(
@@ -38,9 +49,13 @@ export default function LobbyScreen() {
           filter: `id=eq.${participant.sessionId}`,
         },
         (payload) => {
-          const updated = payload.new as any;
-          // Future: navigate to /vote when current_pitch_index changes
-          console.log("Session updated:", updated);
+          const updated = payload.new as Tables<"sessions">;
+          setSessionName(updated.name);
+
+          const nextRoute = getParticipantRoute(updated);
+          if (nextRoute !== "/lobby") {
+            navigate(nextRoute);
+          }
         }
       )
       .subscribe();

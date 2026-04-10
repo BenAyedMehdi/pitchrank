@@ -32,8 +32,8 @@
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
 | B1 | Admin selects a team and marks their pitch as started | 🔴 | [x] |
-| B2 | Starting a pitch opens the voting form on all participant screens | 🔴 | [ ] |
-| B3 | Admin triggers 1-min timer — countdown appears on all screens simultaneously | 🔴 | [ ] |
+| B2 | Starting a pitch opens the voting form on all participant screens | 🔴 | [x] |
+| B3 | Admin triggers 1-min timer — countdown appears on all screens simultaneously | 🔴 | [x] |
 | B4 | Admin sees in real time who has voted and who hasn't for current pitch | 🔴 | [~] |
 | B5 | Admin sees vote count, percentage, and pending voter list | 🔴 | [~] |
 | B6 | Admin closes voting for current team | 🔴 | [ ] |
@@ -44,10 +44,10 @@
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| E1 | Participant sees current team name + "Pitch X of Y" when pitch starts | 🔴 | [ ] |
+| E1 | Participant sees current team name + "Pitch X of Y" when pitch starts | 🔴 | [X] |
 | E2 | Participant rates team on 4 criteria (Technicality, Pitch, Functionality, Innovation) — each 1 to 5 | 🔴 | [ ] |
 | E3 | Participant's own team pitch shows a passive "sit back and enjoy" screen instead of the form | 🔴 | [ ] |
-| E4 | 1-min countdown appears on participant screen when admin triggers it | 🔴 | [ ] |
+| E4 | 1-min countdown appears on participant screen when admin triggers it | 🔴 | [X] |
 | E5 | Vote locks after submission — no double voting | 🔴 | [ ] |
 | E6 | Participant sees a between-pitches waiting screen after voting | 🔴 | [ ] |
 | E7 | Participant can add optional short comment per team | 🟡 | [ ] |

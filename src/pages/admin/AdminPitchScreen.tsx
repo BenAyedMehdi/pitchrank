@@ -7,7 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
+import { isVotingOpen } from "@/lib/sessionRouting";
 import { cn } from "@/lib/utils";
+import { getSecondsRemaining } from "@/lib/timer";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -21,16 +23,10 @@ const STEPS = [
     helper: "Signals participants that this team's pitch has begun.",
   },
   {
-    key: "timer",
-    label: "Trigger 1-min Timer",
-    icon: Timer,
-    helper: "Starts a 60-second countdown on every voter's screen.",
-  },
-  {
     key: "close",
     label: "Close Voting",
     icon: Lock,
-    helper: "Locks the voting form — no more votes for this team.",
+    helper: "Stops the current pitch and closes voting immediately.",
   },
   {
     key: "next",
@@ -50,7 +46,9 @@ export default function AdminPitchScreen() {
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [startingPitch, setStartingPitch] = useState(false);
+  const [stoppingPitch, setStoppingPitch] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now());
 
   const loadData = async (sessionId: string) => {
     const [sessionRes, teamsRes, participantsRes, votesRes] = await Promise.all([
@@ -109,6 +107,13 @@ export default function AdminPitchScreen() {
   }, [id]);
 
   const selectedTeamRow = teams[selectedTeam] ?? null;
+  const activePitchIndex = session?.current_pitch_index ?? -1;
+  const pitchSelected = session?.status === "active" && activePitchIndex >= 0;
+  const timerRemaining = getSecondsRemaining(session?.timer_started_at ?? null, nowMs);
+  const votingRunning = session ? isVotingOpen(session, nowMs) : false;
+  const currentPitchTeam = votingRunning
+    ? teams.find((team) => team.pitch_order === activePitchIndex) ?? null
+    : null;
 
   const eligibleVoters = useMemo(() => {
     if (!selectedTeamRow) return [];
@@ -140,24 +145,70 @@ export default function AdminPitchScreen() {
   const percentage = totalVoters === 0 ? 0 : Math.round((votedCount / totalVoters) * 100);
 
   const pitchesCompleted = session && session.current_pitch_index >= 0 ? session.current_pitch_index + 1 : 0;
-  const activeStep = session?.status === "active" && session.current_pitch_index >= 0 ? 1 : 0;
+  const activeStep = votingRunning ? 1 : 0;
+
+  useEffect(() => {
+    if (!votingRunning) return;
+
+    const interval = window.setInterval(() => setNowMs(Date.now()), 250);
+    return () => window.clearInterval(interval);
+  }, [votingRunning]);
 
   const handleStartPitch = async () => {
     if (!id || !selectedTeamRow) return;
     setStartingPitch(true);
-    const { error } = await supabase.rpc("start_pitch", {
+    const { error: startError } = await supabase.rpc("start_pitch", {
       p_session_id: id,
       p_team_id: selectedTeamRow.id,
     });
-    if (error) {
-      console.error("Failed to start pitch:", error);
-      toast.error(error.message || "Failed to start pitch");
+    if (startError) {
+      console.error("Failed to start pitch:", startError);
+      toast.error(startError.message || "Failed to start pitch");
       setStartingPitch(false);
       return;
     }
+
+    const { error: timerError } = await supabase
+      .from("sessions")
+      .update({ timer_started_at: new Date().toISOString() })
+      .eq("id", id);
+
+    if (timerError) {
+      console.error("Failed to start voting timer:", timerError);
+      toast.error(timerError.message || "Failed to start voting timer");
+      setStartingPitch(false);
+      return;
+    }
+
     await loadData(id);
+    setNowMs(Date.now());
     setStartingPitch(false);
-    toast.success(`Pitch started for ${selectedTeamRow.name}`);
+    toast.success(`Voting started for ${selectedTeamRow.name}`);
+  };
+
+  const handleStopVoting = async () => {
+    if (!id || !pitchSelected) return;
+
+    setStoppingPitch(true);
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        current_pitch_index: -1,
+        timer_started_at: null,
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Failed to stop current pitch:", error);
+      toast.error(error.message || "Failed to stop current pitch");
+      setStoppingPitch(false);
+      return;
+    }
+
+    await loadData(id);
+    setNowMs(Date.now());
+    setStoppingPitch(false);
+    toast.success("Pitch stopped and voting closed");
   };
 
   const statusMap = (s: string | undefined) => {
@@ -188,9 +239,18 @@ export default function AdminPitchScreen() {
         <div className="rounded-2xl border bg-card px-4 py-5 md:px-6 md:py-6">
           <div className="text-center space-y-1">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Pitch {teams.length === 0 ? 0 : selectedTeam + 1} of {teams.length}
+              {votingRunning
+                ? `Pitch ${activePitchIndex + 1} of ${teams.length}`
+                : `No pitch started yet${teams.length > 0 ? ` · ${teams.length} teams ready` : ""}`}
             </p>
-            <h2 className="font-heading text-2xl md:text-3xl font-bold">{selectedTeamRow?.name ?? "No teams configured"}</h2>
+            <h2 className="font-heading text-2xl md:text-3xl font-bold">
+              {votingRunning ? currentPitchTeam?.name : selectedTeamRow?.name ?? "No teams configured"}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {votingRunning
+                ? `Pitch started · Timer ${timerRemaining}s`
+                : "Select a team and press Start Pitch"}
+            </p>
           </div>
         </div>
 
@@ -203,12 +263,14 @@ export default function AdminPitchScreen() {
                 onClick={() => setSelectedTeam(i)}
                 className={cn(
                   "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+                  votingRunning && i === activePitchIndex && "border-success text-success bg-success/10",
                   i === selectedTeam
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-foreground/20"
                 )}
               >
                 {team.name}
+                {votingRunning && i === activePitchIndex ? " (running)" : ""}
               </button>
             ))}
           </div>
@@ -236,10 +298,21 @@ export default function AdminPitchScreen() {
                         isDone && "bg-success/10 border-success/30 text-success hover:bg-success/15",
                         isFuture && "opacity-40"
                       )}
-                      disabled={isFuture || (step.key === "start" && (!selectedTeamRow || startingPitch))}
+                      disabled={
+                        isFuture ||
+                        (step.key === "start" &&
+                          (!selectedTeamRow ||
+                            startingPitch ||
+                            (votingRunning && currentPitchTeam?.id === selectedTeamRow?.id))) ||
+                        (step.key === "close" && (!votingRunning || stoppingPitch))
+                      }
                       onClick={() => {
                         if (step.key === "start") {
                           void handleStartPitch();
+                          return;
+                        }
+                        if (step.key === "close") {
+                          void handleStopVoting();
                           return;
                         }
                         toast.info(`${step.label} is not wired yet.`);
@@ -250,7 +323,11 @@ export default function AdminPitchScreen() {
                       ) : (
                         <step.icon className="w-4 h-4" />
                       )}
-                      {step.label}
+                      {step.key === "start" && votingRunning && currentPitchTeam?.id === selectedTeamRow?.id
+                        ? "Pitch is running now"
+                        : step.key === "close" && votingRunning
+                          ? `Stop voting (${timerRemaining}s)`
+                          : step.label}
                     </Button>
                     <p className="text-[10px] text-muted-foreground pl-1">{step.helper}</p>
                   </div>
