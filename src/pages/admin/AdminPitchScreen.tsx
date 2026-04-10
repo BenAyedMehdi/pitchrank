@@ -180,14 +180,18 @@ export default function AdminPitchScreen() {
       sessionCode={session?.join_code}
       status={statusMap(session?.status)}
       isLive={session?.status === "active"}
+      containerClassName="max-w-[1100px]"
+      contentClassName="py-6 lg:py-8"
     >
-      <div className="space-y-5">
+      <div className="space-y-6">
         {/* Section 1 — Current Pitch Status */}
-        <div className="text-center space-y-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Pitch {teams.length === 0 ? 0 : selectedTeam + 1} of {teams.length}
-          </p>
-          <h2 className="font-heading text-2xl font-bold">{selectedTeamRow?.name ?? "No teams configured"}</h2>
+        <div className="rounded-2xl border bg-card px-4 py-5 md:px-6 md:py-6">
+          <div className="text-center space-y-1">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              Pitch {teams.length === 0 ? 0 : selectedTeam + 1} of {teams.length}
+            </p>
+            <h2 className="font-heading text-2xl md:text-3xl font-bold">{selectedTeamRow?.name ?? "No teams configured"}</h2>
+          </div>
         </div>
 
         {/* Section 5 — Team Selector (horizontal pills) */}
@@ -213,151 +217,155 @@ export default function AdminPitchScreen() {
           </p>
         </div>
 
-        {/* Section 2 — Action Buttons */}
-        <Card className="p-4 space-y-3">
-          <h3 className="font-heading text-sm font-semibold">Pitch flow</h3>
-          <div className="space-y-2">
-            {STEPS.map((step, i) => {
-              const isActive = i === activeStep;
-              const isDone = i < activeStep;
-              const isFuture = i > activeStep;
+        <div className="grid gap-5 lg:grid-cols-12">
+          {/* Section 2 — Action Buttons */}
+          <Card className="p-4 md:p-5 space-y-3 lg:col-span-4 lg:sticky lg:top-24 h-fit">
+            <h3 className="font-heading text-sm font-semibold">Pitch flow</h3>
+            <div className="space-y-2">
+              {STEPS.map((step, i) => {
+                const isActive = i === activeStep;
+                const isDone = i < activeStep;
+                const isFuture = i > activeStep;
 
-              return (
-                <div key={step.key} className="space-y-0.5">
-                  <Button
-                    variant={isActive ? "default" : "outline"}
-                    className={cn(
-                      "w-full h-11 justify-start gap-2 text-sm",
-                      isDone && "bg-success/10 border-success/30 text-success hover:bg-success/15",
-                      isFuture && "opacity-40"
-                    )}
-                    disabled={isFuture || (step.key === "start" && (!selectedTeamRow || startingPitch))}
-                    onClick={() => {
-                      if (step.key === "start") {
-                        void handleStartPitch();
-                        return;
-                      }
-                      toast.info(`${step.label} is not wired yet.`);
-                    }}
-                  >
-                    {isDone ? (
-                      <CheckCircle2 className="w-4 h-4" />
-                    ) : (
-                      <step.icon className="w-4 h-4" />
-                    )}
-                    {step.label}
-                  </Button>
-                  <p className="text-[10px] text-muted-foreground pl-1">{step.helper}</p>
-                </div>
-              );
-            })}
-          </div>
-        </Card>
-
-        {/* Section 3 — Voter Tracking */}
-        <Card className="p-4 space-y-4">
-          <h3 className="font-heading text-sm font-semibold">Voter status</h3>
-
-          {/* Summary */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="font-medium">
-                Voted: {votedCount} / {totalVoters}
-              </span>
-              <span className="text-muted-foreground text-xs">
-                Not yet: {totalVoters - votedCount}
-              </span>
+                return (
+                  <div key={step.key} className="space-y-0.5">
+                    <Button
+                      variant={isActive ? "default" : "outline"}
+                      className={cn(
+                        "w-full h-11 justify-start gap-2 text-sm",
+                        isDone && "bg-success/10 border-success/30 text-success hover:bg-success/15",
+                        isFuture && "opacity-40"
+                      )}
+                      disabled={isFuture || (step.key === "start" && (!selectedTeamRow || startingPitch))}
+                      onClick={() => {
+                        if (step.key === "start") {
+                          void handleStartPitch();
+                          return;
+                        }
+                        toast.info(`${step.label} is not wired yet.`);
+                      }}
+                    >
+                      {isDone ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <step.icon className="w-4 h-4" />
+                      )}
+                      {step.label}
+                    </Button>
+                    <p className="text-[10px] text-muted-foreground pl-1">{step.helper}</p>
+                  </div>
+                );
+              })}
             </div>
-            <Progress value={percentage} className="h-2" />
-            <p className="text-[10px] text-muted-foreground text-right">{percentage}%</p>
-          </div>
+          </Card>
 
-          {/* Filter */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-            <Input
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter by name..."
-              className="h-9 pl-9 text-xs bg-background"
-            />
-          </div>
+          <div className="space-y-5 lg:col-span-8">
+            {/* Section 3 — Voter Tracking */}
+            <Card className="p-4 md:p-5 space-y-4">
+              <h3 className="font-heading text-sm font-semibold">Voter status</h3>
 
-          {/* Voter list */}
-          <div className="max-h-[300px] overflow-y-auto space-y-1.5 -mx-1 px-1">
-            {visibleVoters.map((voter, i) => (
-              <motion.div
-                key={voter.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: i * 0.02 }}
-                className="flex items-center justify-between py-2 px-2.5 rounded-lg hover:bg-muted/50 transition-colors"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                    <span className="text-[10px] font-semibold text-primary">
-                      {voter.name[0]}
-                    </span>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium leading-tight">{voter.name}</p>
-                    <p className="text-[10px] text-muted-foreground">{voter.team}</p>
-                  </div>
+              {/* Summary */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">
+                    Voted: {votedCount} / {totalVoters}
+                  </span>
+                  <span className="text-muted-foreground text-xs">
+                    Not yet: {totalVoters - votedCount}
+                  </span>
                 </div>
-                {voter.voted ? (
-                  <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                ) : (
-                  <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                )}
-              </motion.div>
-            ))}
-          </div>
-        </Card>
+                <Progress value={percentage} className="h-2" />
+                <p className="text-[10px] text-muted-foreground text-right">{percentage}%</p>
+              </div>
 
-        {/* Section 4 — Session Stats (collapsible) */}
-        <Card className="overflow-hidden">
-          <button
-            onClick={() => setStatsOpen(!statsOpen)}
-            className="w-full flex items-center justify-between p-4 text-sm font-semibold font-heading hover:bg-muted/30 transition-colors"
-          >
-            <span className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-muted-foreground" />
-              Session stats
-            </span>
-            {statsOpen ? (
-              <ChevronUp className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            )}
-          </button>
-          {statsOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              className="px-4 pb-4"
-            >
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Total votes cast", value: String(votes.length) },
-                  {
-                    label: "Avg votes / pitch",
-                    value: String(teams.length === 0 ? 0 : Math.round(votes.length / teams.length)),
-                  },
-                  { label: "Pitches completed", value: `${pitchesCompleted} / ${teams.length}` },
-                  { label: "Participation rate", value: `${percentage}%` },
-                ].map((stat) => (
-                  <div
-                    key={stat.label}
-                    className="bg-muted/50 rounded-lg p-3 text-center"
+              {/* Filter */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value)}
+                  placeholder="Filter by name..."
+                  className="h-9 pl-9 text-xs bg-background"
+                />
+              </div>
+
+              {/* Voter list */}
+              <div className="max-h-[420px] overflow-y-auto space-y-1.5 -mx-1 px-1">
+                {visibleVoters.map((voter, i) => (
+                  <motion.div
+                    key={voter.id}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: i * 0.02 }}
+                    className="flex items-center justify-between py-2 px-2.5 rounded-lg hover:bg-muted/50 transition-colors"
                   >
-                    <p className="text-lg font-heading font-bold">{stat.value}</p>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">{stat.label}</p>
-                  </div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="text-[10px] font-semibold text-primary">
+                          {voter.name[0]}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium leading-tight">{voter.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{voter.team}</p>
+                      </div>
+                    </div>
+                    {voter.voted ? (
+                      <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                    ) : (
+                      <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
+                    )}
+                  </motion.div>
                 ))}
               </div>
-            </motion.div>
-          )}
-        </Card>
+            </Card>
+
+            {/* Section 4 — Session Stats (collapsible) */}
+            <Card className="overflow-hidden">
+              <button
+                onClick={() => setStatsOpen(!statsOpen)}
+                className="w-full flex items-center justify-between p-4 text-sm font-semibold font-heading hover:bg-muted/30 transition-colors"
+              >
+                <span className="flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
+                  Session stats
+                </span>
+                {statsOpen ? (
+                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                )}
+              </button>
+              {statsOpen && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  className="px-4 pb-4"
+                >
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+                    {[
+                      { label: "Total votes cast", value: String(votes.length) },
+                      {
+                        label: "Avg votes / pitch",
+                        value: String(teams.length === 0 ? 0 : Math.round(votes.length / teams.length)),
+                      },
+                      { label: "Pitches completed", value: `${pitchesCompleted} / ${teams.length}` },
+                      { label: "Participation rate", value: `${percentage}%` },
+                    ].map((stat) => (
+                      <div
+                        key={stat.label}
+                        className="bg-muted/50 rounded-lg p-3 text-center"
+                      >
+                        <p className="text-lg font-heading font-bold">{stat.value}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{stat.label}</p>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </Card>
+          </div>
+        </div>
       </div>
     </AdminSessionLayout>
   );

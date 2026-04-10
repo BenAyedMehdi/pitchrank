@@ -10,6 +10,8 @@ interface AdminSessionLayoutProps {
   sessionCode?: string;
   status?: "setup" | "active" | "closed";
   isLive?: boolean;
+  containerClassName?: string;
+  contentClassName?: string;
 }
 
 const TABS = [
@@ -24,6 +26,8 @@ export function AdminSessionLayout({
   sessionCode = "HACK24",
   status = "active",
   isLive = false,
+  containerClassName,
+  contentClassName,
 }: AdminSessionLayoutProps) {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -35,7 +39,7 @@ export function AdminSessionLayout({
     <div className="min-h-screen flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b">
-        <div className="max-w-[480px] mx-auto px-4">
+        <div className={cn("max-w-[480px] mx-auto px-4", containerClassName)}>
           {/* Top row: back + session info */}
           <div className="flex items-center gap-3 py-3">
             <button
@@ -87,7 +91,7 @@ export function AdminSessionLayout({
 
       {/* Content */}
       <main className="flex-1">
-        <div className="max-w-[480px] mx-auto px-4 py-5">
+        <div className={cn("max-w-[480px] mx-auto px-4 py-5", containerClassName, contentClassName)}>
           {children}
         </div>
       </main>
