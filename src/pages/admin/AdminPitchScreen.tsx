@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Timer, Lock, ArrowRight, CheckCircle2, Clock, Search, ChevronDown, ChevronUp, BarChart3 } from "lucide-react";
+import { Timer, Lock, ArrowRight, CheckCircle2, Clock, Search, ChevronDown, ChevronUp, BarChart3, Users, Pause, Play, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
+import { isVotingOpen } from "@/lib/sessionRouting";
 import { cn } from "@/lib/utils";
+import { getSessionTimerRemaining, isTimerPaused } from "@/lib/timer";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -21,16 +23,10 @@ const STEPS = [
     helper: "Signals participants that this team's pitch has begun.",
   },
   {
-    key: "timer",
-    label: "Trigger 1-min Timer",
-    icon: Timer,
-    helper: "Starts a 60-second countdown on every voter's screen.",
-  },
-  {
     key: "close",
     label: "Close Voting",
     icon: Lock,
-    helper: "Locks the voting form — no more votes for this team.",
+    helper: "Stops the current pitch and closes voting immediately.",
   },
   {
     key: "next",
@@ -50,7 +46,9 @@ export default function AdminPitchScreen() {
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [startingPitch, setStartingPitch] = useState(false);
+  const [stoppingPitch, setStoppingPitch] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
+  const [nowMs, setNowMs] = useState(Date.now());
 
   const loadData = async (sessionId: string) => {
     const [sessionRes, teamsRes, participantsRes, votesRes] = await Promise.all([
@@ -76,7 +74,10 @@ export default function AdminPitchScreen() {
     if ((teamsRes.data || []).length > 0) {
       const idx = sessionRes.data.current_pitch_index;
       const maxIndex = (teamsRes.data || []).length - 1;
-      setSelectedTeam(idx >= 0 && idx <= maxIndex ? idx : 0);
+      setSelectedTeam((prev) => {
+        if (prev >= 0 && prev <= maxIndex) return prev;
+        return idx >= 0 && idx <= maxIndex ? idx : 0;
+      });
     }
   };
 
@@ -98,8 +99,9 @@ export default function AdminPitchScreen() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "participants", filter: `session_id=eq.${id}` }, () => {
         void loadData(id);
       })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "votes", filter: `session_id=eq.${id}` }, () => {
-        void loadData(id);
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "votes", filter: `session_id=eq.${id}` }, (payload) => {
+        const insertedVote = payload.new as Tables<"votes">;
+        setVotes((prev) => (prev.some((v) => v.id === insertedVote.id) ? prev : [...prev, insertedVote]));
       })
       .subscribe();
 
@@ -109,55 +111,187 @@ export default function AdminPitchScreen() {
   }, [id]);
 
   const selectedTeamRow = teams[selectedTeam] ?? null;
+  const activePitchIndex = session?.current_pitch_index ?? -1;
+  const pitchSelected = session?.status === "active" && activePitchIndex >= 0;
+  const timerRemaining = session ? getSessionTimerRemaining(session, nowMs) : 0;
+  const votingRunning = session ? isVotingOpen(session, nowMs) : false;
+  const timerPaused = session ? isTimerPaused(session) : false;
+  const currentPitchTeam = teams.find((team) => team.pitch_order === activePitchIndex) ?? null;
 
-  const eligibleVoters = useMemo(() => {
-    if (!selectedTeamRow) return [];
-    return participants.filter((p) => p.is_observer || p.team_id !== selectedTeamRow.id);
-  }, [participants, selectedTeamRow]);
+  const trackedTeam = selectedTeamRow ?? currentPitchTeam;
 
   const votedIds = useMemo(() => {
-    if (!selectedTeamRow) return new Set<string>();
-    const teamVotes = votes.filter((v) => v.team_id === selectedTeamRow.id);
+    if (!trackedTeam) return new Set<string>();
+    const teamVotes = votes.filter((v) => v.team_id === trackedTeam.id);
     return new Set(teamVotes.map((v) => v.participant_id));
-  }, [votes, selectedTeamRow]);
+  }, [votes, trackedTeam]);
 
-  const visibleVoters = useMemo(() => {
-    const search = filter.trim().toLowerCase();
-    const rows = eligibleVoters.map((p) => ({
+  const allVoterRows = useMemo(() => {
+    return participants.map((p) => ({
       id: p.id,
       name: p.name,
       team: p.is_observer ? "Observer" : (p.teams?.name ?? "No team"),
+      isTeamMember: Boolean(trackedTeam && !p.is_observer && p.team_id === trackedTeam.id),
       voted: votedIds.has(p.id),
     }));
+  }, [participants, trackedTeam, votedIds]);
+
+  const visibleVoters = useMemo(() => {
+    const search = filter.trim().toLowerCase();
+    const rows = allVoterRows;
     const filtered = search
       ? rows.filter((r) => r.name.toLowerCase().includes(search) || r.team.toLowerCase().includes(search))
       : rows;
     return filtered.sort((a, b) => Number(a.voted) - Number(b.voted));
-  }, [eligibleVoters, filter, votedIds]);
+  }, [allVoterRows, filter]);
 
-  const votedCount = visibleVoters.filter((v) => v.voted).length;
-  const totalVoters = visibleVoters.length;
+  const eligibleVoters = allVoterRows.filter((v) => !v.isTeamMember);
+  const votedCount = eligibleVoters.filter((v) => v.voted).length;
+  const totalVoters = eligibleVoters.length;
   const percentage = totalVoters === 0 ? 0 : Math.round((votedCount / totalVoters) * 100);
+  const teamMemberCount = allVoterRows.filter((v) => v.isTeamMember).length;
 
   const pitchesCompleted = session && session.current_pitch_index >= 0 ? session.current_pitch_index + 1 : 0;
-  const activeStep = session?.status === "active" && session.current_pitch_index >= 0 ? 1 : 0;
+  const activeStep = votingRunning ? 1 : 0;
+
+  useEffect(() => {
+    if (!votingRunning || timerPaused) return;
+
+    const interval = window.setInterval(() => setNowMs(Date.now()), 250);
+    return () => window.clearInterval(interval);
+  }, [votingRunning, timerPaused]);
 
   const handleStartPitch = async () => {
     if (!id || !selectedTeamRow) return;
     setStartingPitch(true);
-    const { error } = await supabase.rpc("start_pitch", {
+    const { error: startError } = await supabase.rpc("start_pitch", {
       p_session_id: id,
       p_team_id: selectedTeamRow.id,
     });
-    if (error) {
-      console.error("Failed to start pitch:", error);
-      toast.error(error.message || "Failed to start pitch");
+    if (startError) {
+      console.error("Failed to start pitch:", startError);
+      toast.error(startError.message || "Failed to start pitch");
       setStartingPitch(false);
       return;
     }
+
+    const { error: timerError } = await supabase
+      .from("sessions")
+      .update({
+        timer_started_at: new Date().toISOString(),
+        timer_duration_seconds: session?.timer_default_seconds ?? 60,
+        timer_paused_remaining_seconds: null,
+      })
+      .eq("id", id);
+
+    if (timerError) {
+      console.error("Failed to start voting timer:", timerError);
+      toast.error(timerError.message || "Failed to start voting timer");
+      setStartingPitch(false);
+      return;
+    }
+
     await loadData(id);
+    setNowMs(Date.now());
     setStartingPitch(false);
-    toast.success(`Pitch started for ${selectedTeamRow.name}`);
+    toast.success(`Voting started for ${selectedTeamRow.name}`);
+  };
+
+  const handleStopVoting = async () => {
+    if (!id || !pitchSelected) return;
+
+    setStoppingPitch(true);
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        current_pitch_index: -1,
+        timer_started_at: null,
+        timer_paused_remaining_seconds: null,
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Failed to stop current pitch:", error);
+      toast.error(error.message || "Failed to stop current pitch");
+      setStoppingPitch(false);
+      return;
+    }
+
+    await loadData(id);
+    setNowMs(Date.now());
+    setStoppingPitch(false);
+    toast.success("Pitch stopped and voting closed");
+  };
+
+  const handlePauseTimer = async () => {
+    if (!id || !session || !votingRunning || timerPaused) return;
+
+    const remaining = getSessionTimerRemaining(session, Date.now());
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        timer_started_at: null,
+        timer_paused_remaining_seconds: remaining,
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Failed to pause timer:", error);
+      toast.error(error.message || "Failed to pause timer");
+      return;
+    }
+
+    await loadData(id);
+    setNowMs(Date.now());
+    toast.success("Timer paused");
+  };
+
+  const handleResumeTimer = async () => {
+    if (!id || !session || !votingRunning || !timerPaused) return;
+
+    const remaining = session.timer_paused_remaining_seconds ?? 0;
+    const duration = session.timer_duration_seconds ?? 60;
+    const elapsedSeconds = Math.max(0, duration - remaining);
+    const resumedStartedAt = new Date(Date.now() - elapsedSeconds * 1000).toISOString();
+
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        timer_started_at: resumedStartedAt,
+        timer_paused_remaining_seconds: null,
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Failed to resume timer:", error);
+      toast.error(error.message || "Failed to resume timer");
+      return;
+    }
+
+    await loadData(id);
+    setNowMs(Date.now());
+    toast.success("Timer resumed");
+  };
+
+  const handleExtendTimer = async () => {
+    if (!id || !session || !pitchSelected) return;
+
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        timer_duration_seconds: (session.timer_duration_seconds ?? 60) + 30,
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Failed to extend timer:", error);
+      toast.error(error.message || "Failed to extend timer");
+      return;
+    }
+
+    await loadData(id);
+    setNowMs(Date.now());
+    toast.success("Timer extended by 30 seconds");
   };
 
   const statusMap = (s: string | undefined) => {
@@ -188,9 +322,20 @@ export default function AdminPitchScreen() {
         <div className="rounded-2xl border bg-card px-4 py-5 md:px-6 md:py-6">
           <div className="text-center space-y-1">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              Pitch {teams.length === 0 ? 0 : selectedTeam + 1} of {teams.length}
+              {votingRunning
+                ? `Pitch ${activePitchIndex + 1} of ${teams.length}`
+                : `No pitch started yet${teams.length > 0 ? ` · ${teams.length} teams ready` : ""}`}
             </p>
-            <h2 className="font-heading text-2xl md:text-3xl font-bold">{selectedTeamRow?.name ?? "No teams configured"}</h2>
+            <h2 className="font-heading text-2xl md:text-3xl font-bold">
+              {votingRunning ? currentPitchTeam?.name : selectedTeamRow?.name ?? "No teams configured"}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              {votingRunning
+                ? timerPaused
+                  ? `Pitch started · Timer paused at ${timerRemaining}s`
+                  : `Pitch started · Timer ${timerRemaining}s`
+                : "Select a team and press Start Pitch"}
+            </p>
           </div>
         </div>
 
@@ -203,12 +348,14 @@ export default function AdminPitchScreen() {
                 onClick={() => setSelectedTeam(i)}
                 className={cn(
                   "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+                  votingRunning && i === activePitchIndex && "border-success text-success bg-success/10",
                   i === selectedTeam
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-foreground/20"
                 )}
               >
                 {team.name}
+                {votingRunning && i === activePitchIndex ? " (running)" : ""}
               </button>
             ))}
           </div>
@@ -236,10 +383,21 @@ export default function AdminPitchScreen() {
                         isDone && "bg-success/10 border-success/30 text-success hover:bg-success/15",
                         isFuture && "opacity-40"
                       )}
-                      disabled={isFuture || (step.key === "start" && (!selectedTeamRow || startingPitch))}
+                      disabled={
+                        isFuture ||
+                        (step.key === "start" &&
+                          (!selectedTeamRow ||
+                            startingPitch ||
+                            (votingRunning && currentPitchTeam?.id === selectedTeamRow?.id))) ||
+                        (step.key === "close" && (!votingRunning || stoppingPitch))
+                      }
                       onClick={() => {
                         if (step.key === "start") {
                           void handleStartPitch();
+                          return;
+                        }
+                        if (step.key === "close") {
+                          void handleStopVoting();
                           return;
                         }
                         toast.info(`${step.label} is not wired yet.`);
@@ -250,19 +408,54 @@ export default function AdminPitchScreen() {
                       ) : (
                         <step.icon className="w-4 h-4" />
                       )}
-                      {step.label}
+                      {step.key === "start" && votingRunning && currentPitchTeam?.id === selectedTeamRow?.id
+                        ? "Pitch is running now"
+                        : step.key === "close" && votingRunning
+                          ? `Stop voting (${timerRemaining}s)`
+                          : step.label}
                     </Button>
                     <p className="text-[10px] text-muted-foreground pl-1">{step.helper}</p>
                   </div>
                 );
               })}
             </div>
+            <div className="pt-2 border-t space-y-2">
+              <Button
+                variant="outline"
+                className="w-full h-10 justify-start gap-2 text-sm"
+                disabled={!votingRunning || timerPaused}
+                onClick={() => void handlePauseTimer()}
+              >
+                <Pause className="w-4 h-4" />
+                Pause timer
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-10 justify-start gap-2 text-sm"
+                disabled={!votingRunning || !timerPaused}
+                onClick={() => void handleResumeTimer()}
+              >
+                <Play className="w-4 h-4" />
+                Resume timer
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-10 justify-start gap-2 text-sm"
+                disabled={!pitchSelected}
+                onClick={() => void handleExtendTimer()}
+              >
+                <Plus className="w-4 h-4" />
+                Extend timer (+30s)
+              </Button>
+            </div>
           </Card>
 
           <div className="space-y-5 lg:col-span-8">
             {/* Section 3 — Voter Tracking */}
             <Card className="p-4 md:p-5 space-y-4">
-              <h3 className="font-heading text-sm font-semibold">Voter status</h3>
+              <h3 className="font-heading text-sm font-semibold">
+                Voter status{trackedTeam ? ` · ${trackedTeam.name}` : ""}
+              </h3>
 
               {/* Summary */}
               <div className="space-y-2">
@@ -274,6 +467,12 @@ export default function AdminPitchScreen() {
                     Not yet: {totalVoters - votedCount}
                   </span>
                 </div>
+                {teamMemberCount > 0 ? (
+                  <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                    <Users className="w-3 h-3" />
+                    {teamMemberCount} team member{teamMemberCount > 1 ? "s" : ""} excluded from voting count
+                  </div>
+                ) : null}
                 <Progress value={percentage} className="h-2" />
                 <p className="text-[10px] text-muted-foreground text-right">{percentage}%</p>
               </div>
@@ -291,6 +490,11 @@ export default function AdminPitchScreen() {
 
               {/* Voter list */}
               <div className="max-h-[420px] overflow-y-auto space-y-1.5 -mx-1 px-1">
+                {!trackedTeam ? (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    Select a team to see voter status.
+                  </div>
+                ) : null}
                 {visibleVoters.map((voter, i) => (
                   <motion.div
                     key={voter.id}
@@ -310,11 +514,34 @@ export default function AdminPitchScreen() {
                         <p className="text-[10px] text-muted-foreground">{voter.team}</p>
                       </div>
                     </div>
-                    {voter.voted ? (
-                      <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
-                    ) : (
-                      <Clock className="w-4 h-4 text-muted-foreground shrink-0" />
-                    )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      {voter.isTeamMember ? (
+                        <>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border font-medium bg-yellow-100 text-yellow-900 border-yellow-300">
+                            Team-member
+                          </span>
+                          <Clock className="w-4 h-4 text-yellow-700" />
+                        </>
+                      ) : (
+                        <>
+                          <span
+                            className={cn(
+                              "text-[10px] px-2 py-0.5 rounded-full border font-medium",
+                              voter.voted
+                                ? "bg-success/10 text-success border-success/30"
+                                : "bg-muted text-muted-foreground border-border"
+                            )}
+                          >
+                            {voter.voted ? "Voted" : "Pending"}
+                          </span>
+                          {voter.voted ? (
+                            <CheckCircle2 className="w-4 h-4 text-success" />
+                          ) : (
+                            <Clock className="w-4 h-4 text-muted-foreground" />
+                          )}
+                        </>
+                      )}
+                    </div>
                   </motion.div>
                 ))}
               </div>

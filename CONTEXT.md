@@ -39,8 +39,12 @@ A real-time web app for live hackathon events. ~36 people in one room. 12 teams 
 | `id` | uuid PK | |
 | `name` | text | |
 | `join_code` | text unique | 6-char uppercase, auto-generated |
+| `criteria_labels` | text[] nullable | Admin-defined criteria labels (min 2) |
 | `status` | text | `setup` → `active` → `voting_closed` → `results_revealed` |
 | `current_pitch_index` | integer | -1 = not started |
+| `timer_default_seconds` | integer | Default timer length for each new pitch (60) |
+| `timer_duration_seconds` | integer | Current pitch timer length (can be extended) |
+| `timer_paused_remaining_seconds` | integer nullable | Remaining seconds when timer is paused |
 | `timer_started_at` | timestamptz | Set when admin triggers timer |
 | `created_at` | timestamptz | |
 
@@ -69,12 +73,8 @@ A real-time web app for live hackathon events. ~36 people in one room. 12 teams 
 | `session_id` | uuid FK | |
 | `participant_id` | uuid FK | |
 | `team_id` | uuid FK | Team being evaluated |
-| `pitch_index` | integer | |
-| `score_technicality` | integer | 1–5 |
-| `score_pitch` | integer | 1–5 |
-| `score_functionality` | integer | 1–5 |
-| `score_innovation` | integer | 1–5 |
-| `total_score` | integer | Computed: sum of 4 scores |
+| `criteria_scores` | integer[] | Scores aligned to `sessions.criteria_labels`, each 1–5 |
+| `total_score` | integer | Computed sum of `criteria_scores` |
 | `submitted_at` | timestamptz | |
 
 > Unique constraint on `(participant_id, team_id)` — one vote per participant per team.
@@ -128,17 +128,10 @@ All state changes update the `sessions` row. Supabase Realtime broadcasts to all
 
 ## Score calculation
 
-- Per criterion: average of all votes received for that team
-- Best Overall: sum of 4 criterion averages
+- Per criterion: average of the `criteria_scores[i]` values for a team
+- Best Overall: sum of criterion averages
 - Winners: top 3 (🥇🥈🥉) shown per category
-
-| Award | Ranked by |
-|-------|-----------|
-| 🏆 Best Overall | Sum of all 4 averages |
-| 💻 Best Technical | `score_technicality` avg |
-| 🎤 Best Pitch | `score_pitch` avg |
-| ⚙️ Most Functional | `score_functionality` avg |
-| 💡 Most Innovative | `score_innovation` avg |
+- Category labels come from `sessions.criteria_labels`
 
 ---
 
@@ -174,6 +167,7 @@ VITE_ADMIN_PASSWORD=
 8. RLS disabled on all tables (internal tool)
 9. Participant identity stored in localStorage as `hackathon_participant`
 10. Admin auth stored in localStorage as `hackathon_admin_auth`
+11. Session must have at least 2 admin-defined criteria before activation
 
 ---
 
