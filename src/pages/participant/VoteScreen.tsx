@@ -113,24 +113,7 @@ export default function VoteScreen() {
             navigate(nextRoute);
             return;
           }
-          const handle = async () => {
-            const teamId = teamsRef.current.find((team) => team.pitch_order === updated.current_pitch_index)?.id;
-            if (!teamId) {
-              setSession(updated);
-              return;
-            }
-
-            const alreadyVotedForPitch = await hasVotedForTeam(updated.id, participant.id, teamId);
-            setAlreadyVoted(alreadyVotedForPitch);
-            if (!shouldRouteToVote(nextRoute, alreadyVotedForPitch)) {
-              navigate("/lobby");
-              return;
-            }
-
-            setSession(updated);
-          };
-
-          void handle();
+          void loadSession();
         }
       )
       .subscribe();
@@ -202,6 +185,20 @@ export default function VoteScreen() {
   };
 
   if (!participant) return null;
+  if (!session || !currentPitch) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-6">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="w-full max-w-[520px] rounded-2xl border bg-card p-6 text-center"
+        >
+          <p className="text-sm text-muted-foreground">Preparing voting screen...</p>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6">
@@ -209,7 +206,7 @@ export default function VoteScreen() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="w-full max-w-[520px] space-y-6"
+        className="w-full max-w-[560px] space-y-6"
       >
         <div className="text-center space-y-2">
           <h1 className="font-heading text-3xl font-bold">Voting is open</h1>
@@ -223,27 +220,44 @@ export default function VoteScreen() {
           )}
         </div>
 
-        <div className="rounded-2xl border bg-card p-5 space-y-4">
+        <div className="rounded-2xl border bg-card p-5 md:p-6 space-y-5 shadow-sm">
           {isOwnTeamPitch ? (
             <p className="text-sm text-muted-foreground text-center py-2">
               Your team is pitching now. Sit back and enjoy.
             </p>
           ) : (
             <>
-              <p className="text-sm font-medium">Rate this pitch (1-5)</p>
-              <div className="space-y-4">
+              <p className="text-sm font-medium text-center">Rate this pitch (1-5)</p>
+              {!isOwnTeamPitch && criteriaDisplayLabels.length === 0 ? (
+                <div className="space-y-4">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="h-4 w-40 rounded bg-muted animate-pulse" />
+                      <div className="flex gap-2">
+                        {[0, 1, 2, 3, 4].map((j) => (
+                          <div key={j} className="w-9 h-9 rounded-md border border-border bg-muted animate-pulse" />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <div className="space-y-4 md:space-y-5">
                 {criteriaDisplayLabels.map((label, criteriaIndex) => (
-                  <div key={`${label}-${criteriaIndex}`} className="space-y-2">
-                    <p className="text-sm font-medium">{label}</p>
-                    <div className="flex gap-2">
+                  <div
+                    key={`${label}-${criteriaIndex}`}
+                    className="space-y-3 rounded-xl border bg-background/60 px-3 py-3 md:px-4 md:py-4"
+                  >
+                    <p className="text-sm font-semibold text-center">{label}</p>
+                    <div className="grid grid-cols-5 gap-2 max-w-[320px] mx-auto">
                       {[1, 2, 3, 4, 5].map((value) => (
                         <button
                           key={value}
                           onClick={() => setScore(criteriaIndex, value)}
                           className={cn(
-                            "w-9 h-9 rounded-md border text-sm font-semibold transition-colors",
+                            "h-10 md:h-11 rounded-lg border text-sm md:text-base font-semibold transition-all",
                             scores[criteriaIndex] === value
-                              ? "bg-primary text-primary-foreground border-primary"
+                              ? "bg-primary text-primary-foreground border-primary shadow-sm scale-[1.02]"
                               : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
                           )}
                           disabled={alreadyVoted || submitting}
@@ -258,7 +272,7 @@ export default function VoteScreen() {
 
               <Button
                 onClick={submitVote}
-                disabled={!canSubmit}
+                disabled={!canSubmit || criteriaDisplayLabels.length === 0}
                 className="w-full h-11"
               >
                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}

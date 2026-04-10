@@ -90,16 +90,7 @@ export default function LobbyScreen() {
           if (!participant) return;
           const updated = payload.new as Tables<"sessions">;
           setSessionName(updated.name);
-
-          const handle = async () => {
-            const nextRoute = getParticipantRoute(updated);
-            const votedForCurrentPitch = await hasVotedForCurrentPitch(updated);
-            if (shouldRouteToVote(nextRoute, votedForCurrentPitch)) {
-              navigate(nextRoute);
-            }
-          };
-
-          void handle();
+          void syncSession();
         }
       )
       .subscribe();
