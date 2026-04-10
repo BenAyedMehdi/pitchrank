@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getParticipant } from "@/lib/participantStore";
 import { getParticipantRoute } from "@/lib/sessionRouting";
-import { getSecondsRemaining } from "@/lib/timer";
+import { getSessionTimerRemaining, isTimerPaused } from "@/lib/timer";
 import { shouldRouteToVote } from "@/lib/voteRouting";
 import { setLastVotedTeam } from "@/lib/voteFlash";
 import {
@@ -131,15 +131,16 @@ export default function VoteScreen() {
   const criteriaDisplayLabels = criteriaLabels.map((label, index) => (label.length > 0 ? label : `Criteria ${index + 1}`));
   const isOwnTeamPitch = !!participant && !!currentPitch && !participant.isObserver && participant.teamId === currentPitch.id;
   const canSubmit = isCompleteVote(scores, criteriaLabels.length) && !alreadyVoted && !isOwnTeamPitch && !submitting;
-  const timerRemaining = getSecondsRemaining(session?.timer_started_at ?? null, nowMs);
+  const timerRemaining = session ? getSessionTimerRemaining(session, nowMs) : 0;
   const timerRunning = timerRemaining > 0;
+  const timerPaused = session ? isTimerPaused(session) : false;
 
   useEffect(() => {
-    if (!timerRunning) return;
+    if (!timerRunning || timerPaused) return;
 
     const interval = window.setInterval(() => setNowMs(Date.now()), 250);
     return () => window.clearInterval(interval);
-  }, [timerRunning]);
+  }, [timerRunning, timerPaused]);
 
   useEffect(() => {
     if (!session) return;
@@ -214,7 +215,9 @@ export default function VoteScreen() {
             {currentPitch ? `Now pitching: ${currentPitch.name}` : "Pitch in progress"}
           </p>
           {timerRunning ? (
-            <p className="text-sm font-semibold text-primary">Time left: {timerRemaining}s</p>
+            <p className="text-sm font-semibold text-primary">
+              {timerPaused ? `Timer paused at ${timerRemaining}s` : `Time left: ${timerRemaining}s`}
+            </p>
           ) : (
             <p className="text-xs text-muted-foreground">Waiting for host to start 1-minute timer</p>
           )}

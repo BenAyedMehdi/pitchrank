@@ -42,6 +42,9 @@ A real-time web app for live hackathon events. ~36 people in one room. 12 teams 
 | `criteria_labels` | text[] nullable | Admin-defined criteria labels (min 2) |
 | `status` | text | `setup` → `active` → `voting_closed` → `results_revealed` |
 | `current_pitch_index` | integer | -1 = not started |
+| `timer_default_seconds` | integer | Default timer length for each new pitch (60) |
+| `timer_duration_seconds` | integer | Current pitch timer length (can be extended) |
+| `timer_paused_remaining_seconds` | integer nullable | Remaining seconds when timer is paused |
 | `timer_started_at` | timestamptz | Set when admin triggers timer |
 | `created_at` | timestamptz | |
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Timer, Lock, ArrowRight, CheckCircle2, Clock, Search, ChevronDown, ChevronUp, BarChart3, Users } from "lucide-react";
+import { Timer, Lock, ArrowRight, CheckCircle2, Clock, Search, ChevronDown, ChevronUp, BarChart3, Users, Pause, Play, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
 import { isVotingOpen } from "@/lib/sessionRouting";
 import { cn } from "@/lib/utils";
-import { getSecondsRemaining } from "@/lib/timer";
+import { getSessionTimerRemaining, isTimerPaused } from "@/lib/timer";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -113,8 +113,9 @@ export default function AdminPitchScreen() {
   const selectedTeamRow = teams[selectedTeam] ?? null;
   const activePitchIndex = session?.current_pitch_index ?? -1;
   const pitchSelected = session?.status === "active" && activePitchIndex >= 0;
-  const timerRemaining = getSecondsRemaining(session?.timer_started_at ?? null, nowMs);
+  const timerRemaining = session ? getSessionTimerRemaining(session, nowMs) : 0;
   const votingRunning = session ? isVotingOpen(session, nowMs) : false;
+  const timerPaused = session ? isTimerPaused(session) : false;
   const currentPitchTeam = teams.find((team) => team.pitch_order === activePitchIndex) ?? null;
 
   const trackedTeam = selectedTeamRow ?? currentPitchTeam;
@@ -154,11 +155,11 @@ export default function AdminPitchScreen() {
   const activeStep = votingRunning ? 1 : 0;
 
   useEffect(() => {
-    if (!votingRunning) return;
+    if (!votingRunning || timerPaused) return;
 
     const interval = window.setInterval(() => setNowMs(Date.now()), 250);
     return () => window.clearInterval(interval);
-  }, [votingRunning]);
+  }, [votingRunning, timerPaused]);
 
   const handleStartPitch = async () => {
     if (!id || !selectedTeamRow) return;
@@ -176,7 +177,11 @@ export default function AdminPitchScreen() {
 
     const { error: timerError } = await supabase
       .from("sessions")
-      .update({ timer_started_at: new Date().toISOString() })
+      .update({
+        timer_started_at: new Date().toISOString(),
+        timer_duration_seconds: session?.timer_default_seconds ?? 60,
+        timer_paused_remaining_seconds: null,
+      })
       .eq("id", id);
 
     if (timerError) {
@@ -201,6 +206,7 @@ export default function AdminPitchScreen() {
       .update({
         current_pitch_index: -1,
         timer_started_at: null,
+        timer_paused_remaining_seconds: null,
       })
       .eq("id", id);
 
@@ -215,6 +221,77 @@ export default function AdminPitchScreen() {
     setNowMs(Date.now());
     setStoppingPitch(false);
     toast.success("Pitch stopped and voting closed");
+  };
+
+  const handlePauseTimer = async () => {
+    if (!id || !session || !votingRunning || timerPaused) return;
+
+    const remaining = getSessionTimerRemaining(session, Date.now());
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        timer_started_at: null,
+        timer_paused_remaining_seconds: remaining,
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Failed to pause timer:", error);
+      toast.error(error.message || "Failed to pause timer");
+      return;
+    }
+
+    await loadData(id);
+    setNowMs(Date.now());
+    toast.success("Timer paused");
+  };
+
+  const handleResumeTimer = async () => {
+    if (!id || !session || !votingRunning || !timerPaused) return;
+
+    const remaining = session.timer_paused_remaining_seconds ?? 0;
+    const duration = session.timer_duration_seconds ?? 60;
+    const elapsedSeconds = Math.max(0, duration - remaining);
+    const resumedStartedAt = new Date(Date.now() - elapsedSeconds * 1000).toISOString();
+
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        timer_started_at: resumedStartedAt,
+        timer_paused_remaining_seconds: null,
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Failed to resume timer:", error);
+      toast.error(error.message || "Failed to resume timer");
+      return;
+    }
+
+    await loadData(id);
+    setNowMs(Date.now());
+    toast.success("Timer resumed");
+  };
+
+  const handleExtendTimer = async () => {
+    if (!id || !session || !pitchSelected) return;
+
+    const { error } = await supabase
+      .from("sessions")
+      .update({
+        timer_duration_seconds: (session.timer_duration_seconds ?? 60) + 30,
+      })
+      .eq("id", id);
+
+    if (error) {
+      console.error("Failed to extend timer:", error);
+      toast.error(error.message || "Failed to extend timer");
+      return;
+    }
+
+    await loadData(id);
+    setNowMs(Date.now());
+    toast.success("Timer extended by 30 seconds");
   };
 
   const statusMap = (s: string | undefined) => {
@@ -254,7 +331,9 @@ export default function AdminPitchScreen() {
             </h2>
             <p className="text-xs text-muted-foreground">
               {votingRunning
-                ? `Pitch started · Timer ${timerRemaining}s`
+                ? timerPaused
+                  ? `Pitch started · Timer paused at ${timerRemaining}s`
+                  : `Pitch started · Timer ${timerRemaining}s`
                 : "Select a team and press Start Pitch"}
             </p>
           </div>
@@ -339,6 +418,35 @@ export default function AdminPitchScreen() {
                   </div>
                 );
               })}
+            </div>
+            <div className="pt-2 border-t space-y-2">
+              <Button
+                variant="outline"
+                className="w-full h-10 justify-start gap-2 text-sm"
+                disabled={!votingRunning || timerPaused}
+                onClick={() => void handlePauseTimer()}
+              >
+                <Pause className="w-4 h-4" />
+                Pause timer
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-10 justify-start gap-2 text-sm"
+                disabled={!votingRunning || !timerPaused}
+                onClick={() => void handleResumeTimer()}
+              >
+                <Play className="w-4 h-4" />
+                Resume timer
+              </Button>
+              <Button
+                variant="outline"
+                className="w-full h-10 justify-start gap-2 text-sm"
+                disabled={!pitchSelected}
+                onClick={() => void handleExtendTimer()}
+              >
+                <Plus className="w-4 h-4" />
+                Extend timer (+30s)
+              </Button>
             </div>
           </Card>
 

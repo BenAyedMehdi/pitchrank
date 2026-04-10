@@ -65,6 +65,9 @@ export type Database = {
           join_code: string
           name: string
           status: string
+          timer_default_seconds: number
+          timer_duration_seconds: number
+          timer_paused_remaining_seconds: number | null
           timer_started_at: string | null
         }
         Insert: {
@@ -75,6 +78,9 @@ export type Database = {
           join_code?: string
           name: string
           status?: string
+          timer_default_seconds?: number
+          timer_duration_seconds?: number
+          timer_paused_remaining_seconds?: number | null
           timer_started_at?: string | null
         }
         Update: {
@@ -85,6 +91,9 @@ export type Database = {
           join_code?: string
           name?: string
           status?: string
+          timer_default_seconds?: number
+          timer_duration_seconds?: number
+          timer_paused_remaining_seconds?: number | null
           timer_started_at?: string | null
         }
         Relationships: []
