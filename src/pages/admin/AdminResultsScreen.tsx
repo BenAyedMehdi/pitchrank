@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Award, CheckCircle2, Loader2, Trophy } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
@@ -35,26 +36,31 @@ export default function AdminResultsScreen() {
   const { id } = useParams<{ id: string }>();
   const [session, setSession] = useState<Tables<"sessions"> | null>(null);
   const [teams, setTeams] = useState<Tables<"teams">[]>([]);
+  const [participants, setParticipants] = useState<Tables<"participants">[]>([]);
   const [votes, setVotes] = useState<Tables<"votes">[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [revealingCategory, setRevealingCategory] = useState<ResultsCategoryKey | null>(null);
   const [revealingAll, setRevealingAll] = useState(false);
   const [closingAllVoting, setClosingAllVoting] = useState(false);
+  const [selectedTeamByCategory, setSelectedTeamByCategory] = useState<Record<string, string>>({});
 
   const loadData = async (sessionId: string) => {
-    const [sessionRes, teamsRes, votesRes] = await Promise.all([
+    const [sessionRes, teamsRes, participantsRes, votesRes] = await Promise.all([
       supabase.from("sessions").select("*").eq("id", sessionId).single(),
       supabase.from("teams").select("*").eq("session_id", sessionId).order("pitch_order"),
+      supabase.from("participants").select("*").eq("session_id", sessionId),
       supabase.from("votes").select("*").eq("session_id", sessionId),
     ]);
 
     if (sessionRes.error) throw sessionRes.error;
     if (teamsRes.error) throw teamsRes.error;
+    if (participantsRes.error) throw participantsRes.error;
     if (votesRes.error) throw votesRes.error;
 
     setSession(sessionRes.data);
     setTeams(teamsRes.data || []);
+    setParticipants(participantsRes.data || []);
     setVotes(votesRes.data || []);
     setError("");
   };
@@ -76,6 +82,9 @@ export default function AdminResultsScreen() {
         void loadData(id);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "teams", filter: `session_id=eq.${id}` }, () => {
+        void loadData(id);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "participants", filter: `session_id=eq.${id}` }, () => {
         void loadData(id);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "votes", filter: `session_id=eq.${id}` }, () => {
@@ -105,6 +114,10 @@ export default function AdminResultsScreen() {
   const criteriaCategories = useMemo(
     () => categories.filter((category) => category.key !== "overall"),
     [categories],
+  );
+  const participantNameById = useMemo(
+    () => new Map(participants.map((participant) => [participant.id, participant.name])),
+    [participants],
   );
 
   const revealedCategoryKeys = session?.results_revealed_categories || [];
@@ -362,6 +375,27 @@ export default function AdminResultsScreen() {
                   team: winner.teamName,
                   score: Number(category.scoreFor(winner).toFixed(2)),
                 }));
+                const selectedTeamId =
+                  selectedTeamByCategory[category.key] ??
+                  category.winners[0]?.teamId ??
+                  teams[0]?.id ??
+                  "";
+                const selectedTeamName =
+                  teams.find((team) => team.id === selectedTeamId)?.name ??
+                  "No team selected";
+                const selectedTeamVotes = votes
+                  .filter((vote) => vote.team_id === selectedTeamId)
+                  .map((vote) => {
+                    const categoryScore = category.key === "overall"
+                      ? vote.criteria_scores.reduce((sum, score) => sum + score, 0)
+                      : vote.criteria_scores[Number(category.key.replace("criterion-", ""))] ?? 0;
+                    return {
+                      voteId: vote.id,
+                      voterName: participantNameById.get(vote.participant_id) ?? "Unknown voter",
+                      categoryScore,
+                    };
+                  })
+                  .sort((a, b) => a.voterName.localeCompare(b.voterName));
 
                 return (
                   <motion.div
@@ -423,6 +457,57 @@ export default function AdminResultsScreen() {
                           </Bar>
                         </BarChart>
                       </ChartContainer>
+
+                      <Accordion type="single" collapsible className="border rounded-xl px-3">
+                        <AccordionItem value={`voter-breakdown-${category.key}`} className="border-none">
+                          <AccordionTrigger className="py-3 text-sm no-underline hover:no-underline">
+                            Who voted for which team
+                          </AccordionTrigger>
+                          <AccordionContent className="pt-1 pb-3 space-y-3">
+                            <div className="overflow-x-auto -mx-1 px-1">
+                              <div className="inline-flex gap-2 min-w-full">
+                                {teams.map((team) => {
+                                  const active = selectedTeamId === team.id;
+                                  return (
+                                    <button
+                                      key={`${category.key}-${team.id}`}
+                                      onClick={() =>
+                                        setSelectedTeamByCategory((prev) => ({ ...prev, [category.key]: team.id }))
+                                      }
+                                      className={cn(
+                                        "shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                                        active
+                                          ? "bg-primary text-primary-foreground border-primary"
+                                          : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground",
+                                      )}
+                                    >
+                                      {team.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            <div className="rounded-lg border bg-muted/20 p-3">
+                              <p className="text-xs font-medium text-muted-foreground mb-2">
+                                Voters for <span className="text-foreground">{selectedTeamName}</span>
+                              </p>
+                              {selectedTeamVotes.length === 0 ? (
+                                <p className="text-xs text-muted-foreground">No votes submitted for this team yet.</p>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {selectedTeamVotes.map((row) => (
+                                    <div key={row.voteId} className="flex items-center justify-between text-sm">
+                                      <span>{row.voterName}</span>
+                                      <span className="font-semibold tabular-nums">{row.categoryScore}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </AccordionContent>
+                        </AccordionItem>
+                      </Accordion>
                     </Card>
                   </motion.div>
                 );
