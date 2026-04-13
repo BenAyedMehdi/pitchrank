@@ -15,6 +15,7 @@ import AdminNewSessionScreen from "./pages/admin/AdminNewSessionScreen";
 import AdminSetupScreen from "./pages/admin/AdminSetupScreen";
 import AdminLobbyScreen from "./pages/admin/AdminLobbyScreen";
 import AdminPitchScreen from "./pages/admin/AdminPitchScreen";
+import AdminResultsScreen from "./pages/admin/AdminResultsScreen";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
           <Route path="/admin/sessions/:id/setup" element={<AdminAuthGuard><AdminSetupScreen /></AdminAuthGuard>} />
           <Route path="/admin/sessions/:id/lobby" element={<AdminAuthGuard><AdminLobbyScreen /></AdminAuthGuard>} />
           <Route path="/admin/sessions/:id/pitch" element={<AdminAuthGuard><AdminPitchScreen /></AdminAuthGuard>} />
+          <Route path="/admin/sessions/:id/results" element={<AdminAuthGuard><AdminResultsScreen /></AdminAuthGuard>} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

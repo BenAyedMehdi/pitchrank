@@ -38,7 +38,7 @@
 | B5 | Admin sees vote count, percentage, and pending voter list | 🔴 | [x] |
 | B6 | Admin closes voting for current team | 🔴 | [X] |
 | B7 | Admin advances to next team | 🔴 | [ ] |
-| B8 | Admin can pause or extend the timer | 🟡 | [ ] |
+| B8 | Admin can pause or extend the timer | 🟡 | [X] |
 
 ### Participant — voting
 
@@ -61,7 +61,7 @@
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
 | C1 | Admin sees full results table: avg scores per team per criterion | 🔴 | [X] |
-| C2 | Admin sees top 3 winners per category (Overall, Technical, Pitch, Functionality, Innovation) | 🔴 | [ ] |
+| C2 | Admin sees top 3 winners per category (Overall, Technical, Pitch, Functionality, Innovation) | 🔴 | [X] |
 | C3 | Admin reveals results to all participants with one button | 🔴 | [ ] |
 | F1 | All participant screens update simultaneously to show results | 🔴 | [ ] |
 | F2 | Participant can view their own submitted ratings | 🔴 | [ ] |

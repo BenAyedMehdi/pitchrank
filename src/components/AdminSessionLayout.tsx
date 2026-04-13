@@ -1,5 +1,5 @@
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Settings, Users, Mic, Radio } from "lucide-react";
+import { ArrowLeft, Settings, Users, Mic, Radio, Trophy } from "lucide-react";
 import { JoinCodeDisplay } from "@/components/JoinCodeDisplay";
 import { SessionStatusBadge } from "@/components/SessionStatusBadge";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ const TABS = [
   { key: "setup", label: "Setup", icon: Settings, path: "setup" },
   { key: "lobby", label: "Lobby", icon: Users, path: "lobby" },
   { key: "pitch", label: "Pitch", icon: Mic, path: "pitch" },
+  { key: "results", label: "Results", icon: Trophy, path: "results" },
 ] as const;
 
 export function AdminSessionLayout({
