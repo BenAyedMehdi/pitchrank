@@ -22,6 +22,7 @@ import {
 } from "@/lib/results";
 import { normalizeCriteriaLabels } from "@/lib/voting";
 import { cn } from "@/lib/utils";
+import { buildPublicResultsUrl } from "@/lib/resultsLink";
 import { toast } from "sonner";
 
 const PODIUM_COLORS = ["#F59E0B", "#94A3B8", "#CD7F32"];
@@ -131,6 +132,11 @@ export default function AdminResultsScreen() {
     [allCategoryKeys, revealedCategoryKeySet],
   );
   const canRevealResults = session?.status === "voting_closed" || session?.status === "results_revealed";
+  const showCloseVotingButton = session?.status === "active";
+  const publicResultsUrl = useMemo(() => {
+    if (!id || typeof window === "undefined") return "";
+    return buildPublicResultsUrl(window.location.origin, id);
+  }, [id]);
 
   const closeEveryVoting = async () => {
     if (!id) return;
@@ -277,6 +283,43 @@ export default function AdminResultsScreen() {
           </div>
         </div>
 
+        <Card className="p-4 md:p-5 space-y-3">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="font-heading text-base font-semibold">Shareable Results Link</h3>
+              <p className="text-xs text-muted-foreground">Anyone can open this URL without auth or session.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (!publicResultsUrl) return;
+                  window.open(publicResultsUrl, "_blank", "noopener,noreferrer");
+                }}
+              >
+                Open
+              </Button>
+              <Button
+                onClick={async () => {
+                  if (!publicResultsUrl) return;
+                  try {
+                    await navigator.clipboard.writeText(publicResultsUrl);
+                    toast.success("Public results URL copied");
+                  } catch (copyError) {
+                    console.error("Failed to copy public results URL:", copyError);
+                    toast.error("Failed to copy URL");
+                  }
+                }}
+              >
+                Copy URL
+              </Button>
+            </div>
+          </div>
+          <div className="rounded-lg border bg-muted/20 px-3 py-2 text-xs font-mono break-all">
+            {publicResultsUrl || "Unavailable"}
+          </div>
+        </Card>
+
         <Card className="p-4 md:p-5 space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
@@ -286,13 +329,15 @@ export default function AdminResultsScreen() {
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-end">
-              <Button
-                variant="destructive"
-                onClick={() => void closeEveryVoting()}
-                disabled={closingAllVoting}
-              >
-                {closingAllVoting ? "Closing..." : "Close every voting"}
-              </Button>
+              {showCloseVotingButton ? (
+                <Button
+                  variant="destructive"
+                  onClick={() => void closeEveryVoting()}
+                  disabled={closingAllVoting}
+                >
+                  {closingAllVoting ? "Closing..." : "Close every voting"}
+                </Button>
+              ) : null}
               {revealAllPressed ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-green-300 bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
                   <CheckCircle2 className="w-3.5 h-3.5" />

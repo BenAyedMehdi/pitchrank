@@ -17,6 +17,7 @@ import AdminSetupScreen from "./pages/admin/AdminSetupScreen";
 import AdminLobbyScreen from "./pages/admin/AdminLobbyScreen";
 import AdminPitchScreen from "./pages/admin/AdminPitchScreen";
 import AdminResultsScreen from "./pages/admin/AdminResultsScreen";
+import PublicResultsScreen from "./pages/public/PublicResultsScreen";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
           <Route path="/lobby" element={<LobbyScreen />} />
           <Route path="/vote" element={<VoteScreen />} />
           <Route path="/results" element={<ResultsScreen />} />
+          <Route path="/results/public/:id" element={<PublicResultsScreen />} />
 
           {/* Admin routes */}
           <Route path="/admin" element={<AdminPasswordGate />} />
