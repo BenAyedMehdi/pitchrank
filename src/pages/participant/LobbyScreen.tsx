@@ -11,7 +11,7 @@ import type { Tables } from "@/integrations/supabase/types";
 
 export default function LobbyScreen() {
   const navigate = useNavigate();
-  const participant = getParticipant();
+  const [participant] = useState(() => getParticipant());
   const [sessionName, setSessionName] = useState(participant?.sessionName || "");
   const teamsRef = useRef<Tables<"teams">[]>([]);
   const [lastVotedTeamName] = useState<string | null>(() => consumeLastVotedTeam());
@@ -70,6 +70,11 @@ export default function LobbyScreen() {
       const votedForCurrentPitch = await hasVotedForCurrentPitch(sessionRes.data);
       if (shouldRouteToVote(nextRoute, votedForCurrentPitch)) {
         navigate(nextRoute);
+        return;
+      }
+
+      if (nextRoute === "/results") {
+        navigate(nextRoute);
       }
     };
 
@@ -98,7 +103,7 @@ export default function LobbyScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [navigate, participant]);
+  }, [navigate, participant?.id, participant?.sessionId]);
 
   if (!participant) return null;
 

@@ -1,43 +1,29 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Award, Loader2, Trophy } from "lucide-react";
+import { Award, CheckCircle2, Loader2, Trophy } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
+import {
+  buildCriteriaDisplayLabels,
+  buildResultsCategories,
+  buildTeamResults,
+  formatScore,
+  getAllCategoryKeys,
+  sortTeamResultsByOverall,
+  type ResultsCategoryKey,
+} from "@/lib/results";
 import { normalizeCriteriaLabels } from "@/lib/voting";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
-type TeamResult = {
-  teamId: string;
-  teamName: string;
-  voteCount: number;
-  criterionAverages: number[];
-  overall: number;
-};
-
-type CategoryTop = {
-  key: string;
-  label: string;
-  maxScore: number;
-  winners: TeamResult[];
-  scoreFor: (team: TeamResult) => number;
-};
-
 const PODIUM_COLORS = ["#F59E0B", "#94A3B8", "#CD7F32"];
-
-function average(values: number[]): number {
-  if (values.length === 0) return 0;
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function formatScore(score: number): string {
-  return score.toFixed(2);
-}
 
 function statusMap(status: string | undefined): "setup" | "active" | "closed" {
   if (status === "setup") return "setup";
@@ -52,6 +38,8 @@ export default function AdminResultsScreen() {
   const [votes, setVotes] = useState<Tables<"votes">[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [revealingCategory, setRevealingCategory] = useState<ResultsCategoryKey | null>(null);
+  const [revealingAll, setRevealingAll] = useState(false);
 
   const loadData = async (sessionId: string) => {
     const [sessionRes, teamsRes, votesRes] = await Promise.all([
@@ -100,74 +88,104 @@ export default function AdminResultsScreen() {
   }, [id]);
 
   const criteriaLabels = useMemo(() => normalizeCriteriaLabels(session?.criteria_labels), [session?.criteria_labels]);
-
-  const criteriaDisplayLabels = useMemo(() => {
-    const maxCriteriaInVotes = votes.reduce((max, vote) => Math.max(max, vote.criteria_scores?.length ?? 0), 0);
-    const criteriaCount = Math.max(criteriaLabels.length, maxCriteriaInVotes);
-    return Array.from({ length: criteriaCount }, (_, index) => criteriaLabels[index] || `Criteria ${index + 1}`);
-  }, [criteriaLabels, votes]);
-
-  const teamResults = useMemo<TeamResult[]>(() => {
-    return teams.map((team) => {
-      const teamVotes = votes.filter((vote) => vote.team_id === team.id);
-      const criterionAverages = criteriaDisplayLabels.map((_, criterionIndex) => {
-        const criterionScores = teamVotes
-          .map((vote) => vote.criteria_scores?.[criterionIndex])
-          .filter((value): value is number => typeof value === "number");
-        return average(criterionScores);
-      });
-
-      return {
-        teamId: team.id,
-        teamName: team.name,
-        voteCount: teamVotes.length,
-        criterionAverages,
-        overall: criterionAverages.reduce((sum, value) => sum + value, 0),
-      };
-    });
-  }, [criteriaDisplayLabels, teams, votes]);
-
-  const sortedResults = useMemo(
-    () =>
-      [...teamResults].sort((a, b) => {
-        if (b.overall !== a.overall) return b.overall - a.overall;
-        if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
-        return a.teamName.localeCompare(b.teamName);
-      }),
-    [teamResults],
+  const criteriaDisplayLabels = useMemo(
+    () => buildCriteriaDisplayLabels(criteriaLabels, votes),
+    [criteriaLabels, votes],
+  );
+  const teamResults = useMemo(
+    () => buildTeamResults(teams, votes, criteriaDisplayLabels),
+    [criteriaDisplayLabels, teams, votes],
+  );
+  const sortedResults = useMemo(() => sortTeamResultsByOverall(teamResults), [teamResults]);
+  const categories = useMemo(
+    () => buildResultsCategories(teamResults, criteriaDisplayLabels),
+    [criteriaDisplayLabels, teamResults],
+  );
+  const criteriaCategories = useMemo(
+    () => categories.filter((category) => category.key !== "overall"),
+    [categories],
   );
 
-  const categoryWinners = useMemo<CategoryTop[]>(() => {
-    const categories: CategoryTop[] = [
-      {
-        key: "overall",
-        label: "Overall",
-        maxScore: Math.max(1, criteriaDisplayLabels.length * 5),
-        winners: [],
-        scoreFor: (team) => team.overall,
-      },
-      ...criteriaDisplayLabels.map((label, criterionIndex) => ({
-        key: `criterion-${criterionIndex}`,
-        label,
-        maxScore: 5,
-        winners: [],
-        scoreFor: (team: TeamResult) => team.criterionAverages[criterionIndex] ?? 0,
-      })),
-    ];
+  const revealedCategoryKeys = session?.results_revealed_categories || [];
+  const revealedCategoryKeySet = useMemo(() => new Set(revealedCategoryKeys), [revealedCategoryKeys]);
+  const allCategoryKeys = useMemo(
+    () => getAllCategoryKeys(criteriaDisplayLabels.length),
+    [criteriaDisplayLabels.length],
+  );
+  const revealAllPressed = useMemo(
+    () => allCategoryKeys.length > 0 && allCategoryKeys.every((key) => revealedCategoryKeySet.has(key)),
+    [allCategoryKeys, revealedCategoryKeySet],
+  );
 
-    return categories.map((category) => {
-      const winners = [...teamResults]
-        .sort((a, b) => {
-          const scoreDiff = category.scoreFor(b) - category.scoreFor(a);
-          if (scoreDiff !== 0) return scoreDiff;
-          if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
-          return a.teamName.localeCompare(b.teamName);
-        })
-        .slice(0, 3);
+  const revealCategory = async (categoryKey: ResultsCategoryKey) => {
+    if (!id || !session) return;
 
-      return { ...category, winners };
-    });
-  }, [criteriaDisplayLabels, teamResults]);
+    const nextCategories = revealedCategoryKeySet.has(categoryKey)
+      ? [...revealedCategoryKeys, categoryKey]
+      : [...revealedCategoryKeys, categoryKey];
+    setRevealingCategory(categoryKey);
+
+    const { error: updateError } = await supabase
+      .from("sessions")
+      .update({
+        status: "results_revealed",
+        results_revealed_categories: nextCategories,
+      })
+      .eq("id", id);
+
+    setRevealingCategory(null);
+
+    if (updateError) {
+      console.error("Failed to reveal category:", updateError);
+      toast.error(updateError.message || "Failed to reveal category");
+      return;
+    }
+
+    setSession((prev) => (
+      prev
+        ? {
+            ...prev,
+            status: "results_revealed",
+            results_revealed_categories: nextCategories,
+          }
+        : prev
+    ));
+    void loadData(id);
+    toast.success(revealedCategoryKeySet.has(categoryKey) ? "Category revealed again" : "Category revealed to participants");
+  };
+
+  const revealAllCategories = async () => {
+    if (!id || !session) return;
+
+    setRevealingAll(true);
+    const { error: updateError } = await supabase
+      .from("sessions")
+      .update({
+        status: "results_revealed",
+        results_revealed_categories: allCategoryKeys,
+      })
+      .eq("id", id);
+
+    setRevealingAll(false);
+
+    if (updateError) {
+      console.error("Failed to reveal all categories:", updateError);
+      toast.error(updateError.message || "Failed to reveal all categories");
+      return;
+    }
+
+    setSession((prev) => (
+      prev
+        ? {
+            ...prev,
+            status: "results_revealed",
+            results_revealed_categories: allCategoryKeys,
+          }
+        : prev
+    ));
+    void loadData(id);
+    toast.success("All categories revealed to participants");
+  };
 
   useEffect(() => {
     if (!error) return;
@@ -205,6 +223,72 @@ export default function AdminResultsScreen() {
           </div>
         </div>
 
+        <Card className="p-4 md:p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="font-heading text-base font-semibold">Reveal Results</h3>
+              <p className="text-xs text-muted-foreground">Reveal categories one by one, or reveal all at once.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {revealAllPressed ? (
+                <span className="inline-flex items-center gap-1 rounded-full border border-green-300 bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  Revealed
+                </span>
+              ) : null}
+              <Button
+                onClick={() => void revealAllCategories()}
+                disabled={revealingAll}
+              >
+                {revealingAll ? "Revealing..." : "Reveal all categories"}
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+            {criteriaCategories.map((category) => {
+              const isRevealed = revealedCategoryKeySet.has(category.key);
+              const isRevealing = revealingCategory === category.key;
+
+              return (
+                <div
+                  key={category.key}
+                  className={cn(
+                    "rounded-xl border p-3 flex items-center justify-between gap-3 transition-colors",
+                    isRevealed
+                      ? "bg-green-50 border-green-300"
+                      : "bg-card border-border",
+                  )}
+                >
+                  <div className="min-w-0">
+                    <p className={cn("text-sm font-medium truncate", isRevealed && "text-green-800")}>
+                      {category.label}
+                    </p>
+                    <p className={cn("text-[11px] text-muted-foreground", isRevealed && "text-green-700")}>
+                      {isRevealed ? "Revealed to participants" : "Hidden from participants"}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {isRevealed ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-green-300 bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        Revealed
+                      </span>
+                    ) : null}
+                    <Button
+                      size="sm"
+                      variant={isRevealed ? "secondary" : "default"}
+                      disabled={isRevealing}
+                      onClick={() => void revealCategory(category.key)}
+                    >
+                      {isRevealing ? "..." : isRevealed ? "Reveal again" : "Reveal"}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+
         {teams.length === 0 ? (
           <Card className="p-8 text-center">
             <p className="text-sm text-muted-foreground">No teams available for this session yet.</p>
@@ -217,7 +301,7 @@ export default function AdminResultsScreen() {
         ) : (
           <>
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {categoryWinners.map((category, categoryIndex) => {
+              {categories.map((category, categoryIndex) => {
                 const chartData = category.winners.map((winner, winnerIndex) => ({
                   rank: winnerIndex + 1,
                   team: winner.teamName,

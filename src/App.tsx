@@ -9,6 +9,7 @@ import JoinCodeScreen from "./pages/participant/JoinCodeScreen";
 import JoinScreen from "./pages/participant/JoinScreen";
 import LobbyScreen from "./pages/participant/LobbyScreen";
 import VoteScreen from "./pages/participant/VoteScreen";
+import ResultsScreen from "./pages/participant/ResultsScreen";
 import AdminPasswordGate from "./pages/admin/AdminPasswordGate";
 import AdminSessionsScreen from "./pages/admin/AdminSessionsScreen";
 import AdminNewSessionScreen from "./pages/admin/AdminNewSessionScreen";
@@ -32,6 +33,7 @@ const App = () => (
           <Route path="/join/:code" element={<JoinScreen />} />
           <Route path="/lobby" element={<LobbyScreen />} />
           <Route path="/vote" element={<VoteScreen />} />
+          <Route path="/results" element={<ResultsScreen />} />
 
           {/* Admin routes */}
           <Route path="/admin" element={<AdminPasswordGate />} />

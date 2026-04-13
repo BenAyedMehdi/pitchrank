@@ -20,7 +20,7 @@ import { toast } from "sonner";
 
 export default function VoteScreen() {
   const navigate = useNavigate();
-  const participant = getParticipant();
+  const [participant] = useState(() => getParticipant());
 
   const [session, setSession] = useState<Tables<"sessions"> | null>(null);
   const [teams, setTeams] = useState<Tables<"teams">[]>([]);
@@ -121,7 +121,7 @@ export default function VoteScreen() {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [navigate, participant]);
+  }, [navigate, participant?.id, participant?.sessionId]);
 
   const currentPitch = useMemo(() => {
     if (!session || teams.length === 0 || session.current_pitch_index < 0) return null;

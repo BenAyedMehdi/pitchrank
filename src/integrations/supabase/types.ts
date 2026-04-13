@@ -64,6 +64,7 @@ export type Database = {
           id: string
           join_code: string
           name: string
+          results_revealed_categories: string[]
           status: string
           timer_default_seconds: number
           timer_duration_seconds: number
@@ -77,6 +78,7 @@ export type Database = {
           id?: string
           join_code?: string
           name: string
+          results_revealed_categories?: string[]
           status?: string
           timer_default_seconds?: number
           timer_duration_seconds?: number
@@ -90,6 +92,7 @@ export type Database = {
           id?: string
           join_code?: string
           name?: string
+          results_revealed_categories?: string[]
           status?: string
           timer_default_seconds?: number
           timer_duration_seconds?: number

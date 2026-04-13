@@ -62,8 +62,8 @@
 |----|-------|----------|------|
 | C1 | Admin sees full results table: avg scores per team per criterion | 🔴 | [X] |
 | C2 | Admin sees top 3 winners per category (Overall, Technical, Pitch, Functionality, Innovation) | 🔴 | [X] |
-| C3 | Admin reveals results to all participants with one button | 🔴 | [ ] |
-| F1 | All participant screens update simultaneously to show results | 🔴 | [ ] |
+| C3 | Admin reveals results to all participants with one button | 🔴 | [X] |
+| F1 | All participant screens update simultaneously to show results | 🔴 | [X] |
 | F2 | Participant can view their own submitted ratings | 🔴 | [ ] |
 | C4 | Admin can export results as CSV or PDF | 🟡 | [ ] |
 | C5 | Admin sees individual voter breakdown (who gave what to whom) | 🟡 | [ ] |
