@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Timer, Lock, ArrowRight, CheckCircle2, Clock, Search, ChevronDown, ChevronUp, BarChart3, Users, Pause, Play, Plus, Trophy } from "lucide-react";
+import { Timer, Lock, ArrowRight, CheckCircle2, Clock, Search, ChevronDown, ChevronUp, BarChart3, Users, Pause, Play, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -49,7 +49,6 @@ export default function AdminPitchScreen() {
   const [stoppingPitch, setStoppingPitch] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
-  const [closingAllVoting, setClosingAllVoting] = useState(false);
 
   const loadData = async (sessionId: string) => {
     const [sessionRes, teamsRes, participantsRes, votesRes] = await Promise.all([
@@ -295,34 +294,6 @@ export default function AdminPitchScreen() {
     toast.success("Timer extended by 30 seconds");
   };
 
-  const handleCloseAllVoting = async () => {
-    if (!id) return;
-
-    setClosingAllVoting(true);
-    const { error } = await supabase
-      .from("sessions")
-      .update({
-        status: "voting_closed",
-        current_pitch_index: -1,
-        timer_started_at: null,
-        timer_paused_remaining_seconds: null,
-        results_revealed_categories: [],
-      })
-      .eq("id", id);
-
-    if (error) {
-      console.error("Failed to close all voting:", error);
-      toast.error(error.message || "Failed to close all voting");
-      setClosingAllVoting(false);
-      return;
-    }
-
-    await loadData(id);
-    setNowMs(Date.now());
-    setClosingAllVoting(false);
-    toast.success("All voting closed. Participants moved to results waiting screen.");
-  };
-
   const statusMap = (s: string | undefined) => {
     if (s === "setup") return "setup" as const;
     if (s === "active") return "active" as const;
@@ -475,15 +446,6 @@ export default function AdminPitchScreen() {
               >
                 <Plus className="w-4 h-4" />
                 Extend timer (+30s)
-              </Button>
-              <Button
-                variant="destructive"
-                className="w-full h-10 justify-start gap-2 text-sm"
-                disabled={closingAllVoting}
-                onClick={() => void handleCloseAllVoting()}
-              >
-                <Trophy className="w-4 h-4" />
-                {closingAllVoting ? "Closing all voting..." : "Close every voting"}
               </Button>
             </div>
           </Card>

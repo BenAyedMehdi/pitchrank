@@ -64,7 +64,7 @@
 | C2 | Admin sees top 3 winners per category (Overall, Technical, Pitch, Functionality, Innovation) | 🔴 | [X] |
 | C3 | Admin reveals results to all participants with one button | 🔴 | [X] |
 | F1 | All participant screens update simultaneously to show results | 🔴 | [X] |
-| F2 | Participant can view their own submitted ratings | 🔴 | [ ] |
+| F2 | Participant can view their own submitted ratings | 🔴 | [X] |
 | C4 | Admin can export results as CSV or PDF | 🟡 | [ ] |
 | C5 | Admin sees individual voter breakdown (who gave what to whom) | 🟡 | [ ] |
 | F3 | Results page is shareable via link | 🟡 | [ ] |

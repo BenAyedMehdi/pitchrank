@@ -40,6 +40,7 @@ export default function AdminResultsScreen() {
   const [error, setError] = useState("");
   const [revealingCategory, setRevealingCategory] = useState<ResultsCategoryKey | null>(null);
   const [revealingAll, setRevealingAll] = useState(false);
+  const [closingAllVoting, setClosingAllVoting] = useState(false);
 
   const loadData = async (sessionId: string) => {
     const [sessionRes, teamsRes, votesRes] = await Promise.all([
@@ -116,6 +117,46 @@ export default function AdminResultsScreen() {
     () => allCategoryKeys.length > 0 && allCategoryKeys.every((key) => revealedCategoryKeySet.has(key)),
     [allCategoryKeys, revealedCategoryKeySet],
   );
+  const canRevealResults = session?.status === "voting_closed" || session?.status === "results_revealed";
+
+  const closeEveryVoting = async () => {
+    if (!id) return;
+
+    setClosingAllVoting(true);
+    const { error: closeError } = await supabase
+      .from("sessions")
+      .update({
+        status: "voting_closed",
+        current_pitch_index: -1,
+        timer_started_at: null,
+        timer_paused_remaining_seconds: null,
+        results_revealed_categories: [],
+      })
+      .eq("id", id);
+
+    setClosingAllVoting(false);
+
+    if (closeError) {
+      console.error("Failed to close all voting:", closeError);
+      toast.error(closeError.message || "Failed to close all voting");
+      return;
+    }
+
+    setSession((prev) => (
+      prev
+        ? {
+            ...prev,
+            status: "voting_closed",
+            current_pitch_index: -1,
+            timer_started_at: null,
+            timer_paused_remaining_seconds: null,
+            results_revealed_categories: [],
+          }
+        : prev
+    ));
+    void loadData(id);
+    toast.success("All voting closed. You can now reveal results.");
+  };
 
   const revealCategory = async (categoryKey: ResultsCategoryKey) => {
     if (!id || !session) return;
@@ -227,9 +268,18 @@ export default function AdminResultsScreen() {
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div>
               <h3 className="font-heading text-base font-semibold">Reveal Results</h3>
-              <p className="text-xs text-muted-foreground">Reveal categories one by one, or reveal all at once.</p>
+              <p className="text-xs text-muted-foreground">
+                First close all voting, then reveal categories one by one or all at once.
+              </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <Button
+                variant="destructive"
+                onClick={() => void closeEveryVoting()}
+                disabled={closingAllVoting}
+              >
+                {closingAllVoting ? "Closing..." : "Close every voting"}
+              </Button>
               {revealAllPressed ? (
                 <span className="inline-flex items-center gap-1 rounded-full border border-green-300 bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
                   <CheckCircle2 className="w-3.5 h-3.5" />
@@ -238,12 +288,17 @@ export default function AdminResultsScreen() {
               ) : null}
               <Button
                 onClick={() => void revealAllCategories()}
-                disabled={revealingAll}
+                disabled={revealingAll || !canRevealResults}
               >
                 {revealingAll ? "Revealing..." : "Reveal all categories"}
               </Button>
             </div>
           </div>
+          {!canRevealResults ? (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Close every voting first to enable reveal actions.
+            </div>
+          ) : null}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
             {criteriaCategories.map((category) => {
               const isRevealed = revealedCategoryKeySet.has(category.key);
@@ -277,7 +332,7 @@ export default function AdminResultsScreen() {
                     <Button
                       size="sm"
                       variant={isRevealed ? "secondary" : "default"}
-                      disabled={isRevealing}
+                      disabled={isRevealing || !canRevealResults}
                       onClick={() => void revealCategory(category.key)}
                     >
                       {isRevealing ? "..." : isRevealed ? "Reveal again" : "Reveal"}
