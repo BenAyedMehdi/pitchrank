@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Award, CheckCircle2, Loader2, Trophy } from "lucide-react";
+import { Award, CheckCircle2, Download, Loader2, Trophy } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -20,6 +20,7 @@ import {
   sortTeamResultsByOverall,
   type ResultsCategoryKey,
 } from "@/lib/results";
+import { buildCategoryCsvExports } from "@/lib/resultsExport";
 import { normalizeCriteriaLabels } from "@/lib/voting";
 import { cn } from "@/lib/utils";
 import { buildPublicResultsUrl } from "@/lib/resultsLink";
@@ -44,6 +45,7 @@ export default function AdminResultsScreen() {
   const [revealingCategory, setRevealingCategory] = useState<ResultsCategoryKey | null>(null);
   const [revealingAll, setRevealingAll] = useState(false);
   const [closingAllVoting, setClosingAllVoting] = useState(false);
+  const [exportingCsv, setExportingCsv] = useState(false);
   const [selectedTeamByCategory, setSelectedTeamByCategory] = useState<Record<string, string>>({});
 
   const loadData = async (sessionId: string) => {
@@ -177,6 +179,49 @@ export default function AdminResultsScreen() {
     toast.success("All voting closed. You can now reveal results.");
   };
 
+  const triggerCsvDownload = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCsv = async () => {
+    if (!session || categories.length === 0) {
+      toast.info("No results available to export yet.");
+      return;
+    }
+
+    setExportingCsv(true);
+    try {
+      const exports = buildCategoryCsvExports({
+        sessionName: session.name,
+        categories,
+        teamResults,
+        votes,
+        participantNameById,
+      });
+
+      exports.forEach((file, index) => {
+        window.setTimeout(() => {
+          triggerCsvDownload(file.filename, file.content);
+        }, index * 150);
+      });
+
+      toast.success(`Exported ${exports.length} category CSV file${exports.length > 1 ? "s" : ""}.`);
+    } catch (exportError) {
+      console.error("Failed to export CSV:", exportError);
+      toast.error("Failed to export CSV");
+    } finally {
+      setExportingCsv(false);
+    }
+  };
+
   const revealCategory = async (categoryKey: ResultsCategoryKey) => {
     if (!id || !session) return;
 
@@ -289,7 +334,15 @@ export default function AdminResultsScreen() {
               <h3 className="font-heading text-base font-semibold">Shareable Results Link</h3>
               <p className="text-xs text-muted-foreground">Anyone can open this URL without auth or session.</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap justify-end">
+              <Button
+                variant="outline"
+                onClick={() => void exportCsv()}
+                disabled={exportingCsv || categories.length === 0}
+              >
+                <Download className="w-4 h-4" />
+                {exportingCsv ? "Exporting..." : "Export CSV"}
+              </Button>
               <Button
                 variant="outline"
                 onClick={() => {
