@@ -45,6 +45,7 @@ export default function AdminResultsScreen() {
   const [revealingCategory, setRevealingCategory] = useState<ResultsCategoryKey | null>(null);
   const [revealingAll, setRevealingAll] = useState(false);
   const [closingAllVoting, setClosingAllVoting] = useState(false);
+  const [reopeningSession, setReopeningSession] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
   const [selectedTeamByCategory, setSelectedTeamByCategory] = useState<Record<string, string>>({});
 
@@ -135,6 +136,7 @@ export default function AdminResultsScreen() {
   );
   const canRevealResults = session?.status === "voting_closed" || session?.status === "results_revealed";
   const showCloseVotingButton = session?.status === "active";
+  const showReopenSessionButton = session?.status === "voting_closed" || session?.status === "results_revealed";
   const publicResultsUrl = useMemo(() => {
     if (!id || typeof window === "undefined") return "";
     return buildPublicResultsUrl(window.location.origin, id);
@@ -177,6 +179,30 @@ export default function AdminResultsScreen() {
     ));
     void loadData(id);
     toast.success("All voting closed. You can now reveal results.");
+  };
+
+  const reopenSession = async () => {
+    if (!id) return;
+
+    setReopeningSession(true);
+    const { error: reopenError } = await supabase
+      .from("sessions")
+      .update({
+        status: "active",
+      })
+      .eq("id", id);
+
+    setReopeningSession(false);
+
+    if (reopenError) {
+      console.error("Failed to reopen session:", reopenError);
+      toast.error(reopenError.message || "Failed to reopen session");
+      return;
+    }
+
+    setSession((prev) => (prev ? { ...prev, status: "active" } : prev));
+    void loadData(id);
+    toast.success("Session reopened.");
   };
 
   const triggerCsvDownload = (filename: string, content: string) => {
@@ -389,6 +415,15 @@ export default function AdminResultsScreen() {
                   disabled={closingAllVoting}
                 >
                   {closingAllVoting ? "Closing..." : "Close every voting"}
+                </Button>
+              ) : null}
+              {showReopenSessionButton ? (
+                <Button
+                  variant="outline"
+                  onClick={() => void reopenSession()}
+                  disabled={reopeningSession}
+                >
+                  {reopeningSession ? "Reopening..." : "Reopen session"}
                 </Button>
               ) : null}
               {revealAllPressed ? (

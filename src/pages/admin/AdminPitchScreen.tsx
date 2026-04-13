@@ -150,6 +150,13 @@ export default function AdminPitchScreen() {
   const totalVoters = eligibleVoters.length;
   const percentage = totalVoters === 0 ? 0 : Math.round((votedCount / totalVoters) * 100);
   const teamMemberCount = allVoterRows.filter((v) => v.isTeamMember).length;
+  const teamsWithStartedVoting = useMemo(() => {
+    const ids = new Set(votes.map((vote) => vote.team_id));
+    if (pitchSelected && currentPitchTeam?.id) {
+      ids.add(currentPitchTeam.id);
+    }
+    return ids;
+  }, [votes, pitchSelected, currentPitchTeam?.id]);
 
   const pitchesCompleted = session && session.current_pitch_index >= 0 ? session.current_pitch_index + 1 : 0;
   const activeStep = votingRunning ? 1 : 0;
@@ -347,7 +354,7 @@ export default function AdminPitchScreen() {
                 key={team.id}
                 onClick={() => setSelectedTeam(i)}
                 className={cn(
-                  "shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
+                  "relative shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
                   votingRunning && i === activePitchIndex && "border-success text-success bg-success/10",
                   i === selectedTeam
                     ? "bg-primary text-primary-foreground border-primary"
@@ -356,6 +363,11 @@ export default function AdminPitchScreen() {
               >
                 {team.name}
                 {votingRunning && i === activePitchIndex ? " (running)" : ""}
+                {teamsWithStartedVoting.has(team.id) ? (
+                  <span className="absolute -top-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-success text-success-foreground border border-background">
+                    <CheckCircle2 className="w-3 h-3" />
+                  </span>
+                ) : null}
               </button>
             ))}
           </div>
