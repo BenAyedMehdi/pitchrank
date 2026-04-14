@@ -25,49 +25,49 @@
 
 ---
 
-## Phase 2 — Pitch control & voting 🟡 Next up
+## Phase 2 — Pitch control & voting ✅ Complete
 
-### Admin — pitch control (static UI done, needs Supabase wiring)
+### Admin — pitch control (Supabase-backed, partial flow live)
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| B1 | Admin selects a team and marks their pitch as started | 🔴 | [~] |
-| B2 | Starting a pitch opens the voting form on all participant screens | 🔴 | [ ] |
-| B3 | Admin triggers 1-min timer — countdown appears on all screens simultaneously | 🔴 | [ ] |
-| B4 | Admin sees in real time who has voted and who hasn't for current pitch | 🔴 | [ ] |
-| B5 | Admin sees vote count, percentage, and pending voter list | 🔴 | [ ] |
-| B6 | Admin closes voting for current team | 🔴 | [ ] |
-| B7 | Admin advances to next team | 🔴 | [ ] |
-| B8 | Admin can pause or extend the timer | 🟡 | [ ] |
+| B1 | Admin selects a team and marks their pitch as started | 🔴 | [x] |
+| B2 | Starting a pitch opens the voting form on all participant screens | 🔴 | [x] |
+| B3 | Admin triggers 1-min timer — countdown appears on all screens simultaneously | 🔴 | [x] |
+| B4 | Admin sees in real time who has voted and who hasn't for current pitch | 🔴 | [x] |
+| B5 | Admin sees vote count, percentage, and pending voter list | 🔴 | [x] |
+| B6 | Admin closes voting for current team | 🔴 | [X] |
+| B7 | Admin advances to next team | 🔴 | [X] |
+| B8 | Admin can pause or extend the timer | 🟡 | [X] |
 
 ### Participant — voting
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| E1 | Participant sees current team name + "Pitch X of Y" when pitch starts | 🔴 | [ ] |
-| E2 | Participant rates team on 4 criteria (Technicality, Pitch, Functionality, Innovation) — each 1 to 5 | 🔴 | [ ] |
-| E3 | Participant's own team pitch shows a passive "sit back and enjoy" screen instead of the form | 🔴 | [ ] |
-| E4 | 1-min countdown appears on participant screen when admin triggers it | 🔴 | [ ] |
-| E5 | Vote locks after submission — no double voting | 🔴 | [ ] |
-| E6 | Participant sees a between-pitches waiting screen after voting | 🔴 | [ ] |
+| E1 | Participant sees current team name + "Pitch X of Y" when pitch starts | 🔴 | [X] |
+| E2 | Participant rates team on 4 criteria (Technicality, Pitch, Functionality, Innovation) — each 1 to 5 | 🔴 | [X] |
+| E3 | Participant's own team pitch shows a passive "sit back and enjoy" screen instead of the form | 🔴 | [X] |
+| E4 | 1-min countdown appears on participant screen when admin triggers it | 🔴 | [X] |
+| E5 | Vote locks after submission — no double voting | 🔴 | [X] |
+| E6 | Participant sees a between-pitches waiting screen after voting | 🔴 | [X] |
 | E7 | Participant can add optional short comment per team | 🟡 | [ ] |
-| E8 | Participant can edit vote before timer ends or admin advances | 🟡 | [ ] |
+| E8 | Participant can edit vote before timer ends or admin advances | 🟡 | [X] |
 | D4 | Participant can rejoin and be restored to correct screen if tab is closed | 🟡 | [ ] |
 
 ---
 
-## Phase 3 — Results
+## Phase 3 — Results ✅ Complete
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| C1 | Admin sees full results table: avg scores per team per criterion | 🔴 | [ ] |
-| C2 | Admin sees top 3 winners per category (Overall, Technical, Pitch, Functionality, Innovation) | 🔴 | [ ] |
-| C3 | Admin reveals results to all participants with one button | 🔴 | [ ] |
-| F1 | All participant screens update simultaneously to show results | 🔴 | [ ] |
-| F2 | Participant can view their own submitted ratings | 🔴 | [ ] |
-| C4 | Admin can export results as CSV or PDF | 🟡 | [ ] |
-| C5 | Admin sees individual voter breakdown (who gave what to whom) | 🟡 | [ ] |
-| F3 | Results page is shareable via link | 🟡 | [ ] |
+| C1 | Admin sees full results table: avg scores per team per criterion | 🔴 | [X] |
+| C2 | Admin sees top 3 winners per category (Overall, Technical, Pitch, Functionality, Innovation) | 🔴 | [X] |
+| C3 | Admin reveals results to all participants with one button | 🔴 | [X] |
+| F1 | All participant screens update simultaneously to show results | 🔴 | [X] |
+| F2 | Participant can view their own submitted ratings | 🔴 | [X] |
+| C4 | Admin can export results as CSV or PDF | 🟡 | [X] |
+| C5 | Admin sees individual voter breakdown (who gave what to whom) | 🟡 | [X] |
+| F3 | Results page is shareable via link | 🟡 | [X] |
 
 ---
 
@@ -88,4 +88,14 @@
 |---|---|
 | Admin ← new participants joining | ✅ Live |
 | All clients ← session state changes | ✅ Wired, awaiting phase 2 transitions |
-| Admin ← new votes during pitch | ⬜ Phase 2 |
+| Admin ← new votes during pitch | ✅ Live on admin pitch screen |
+
+---
+
+## Feature branch updates (latest)
+
+- Connected project to real Supabase (env-based client + migrations pushed)
+- Added DB function `start_pitch(session_id, team_id)` and wired admin "Start Pitch" action via RPC
+- Replaced `AdminPitchScreen` mock data with live Supabase data (`sessions`, `teams`, `participants`, `votes`)
+- Added realtime refresh on admin pitch screen for session updates, new participants, and new votes
+- Improved desktop UX for `AdminPitchScreen` and `AdminLobbyScreen` with responsive wide layouts and multi-column cards

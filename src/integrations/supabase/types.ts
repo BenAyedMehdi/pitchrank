@@ -58,30 +58,45 @@ export type Database = {
       }
       sessions: {
         Row: {
+          criteria_labels: string[] | null
           created_at: string
           current_pitch_index: number
           id: string
           join_code: string
           name: string
+          results_revealed_categories: string[]
           status: string
+          timer_default_seconds: number
+          timer_duration_seconds: number
+          timer_paused_remaining_seconds: number | null
           timer_started_at: string | null
         }
         Insert: {
+          criteria_labels?: string[] | null
           created_at?: string
           current_pitch_index?: number
           id?: string
           join_code?: string
           name: string
+          results_revealed_categories?: string[]
           status?: string
+          timer_default_seconds?: number
+          timer_duration_seconds?: number
+          timer_paused_remaining_seconds?: number | null
           timer_started_at?: string | null
         }
         Update: {
+          criteria_labels?: string[] | null
           created_at?: string
           current_pitch_index?: number
           id?: string
           join_code?: string
           name?: string
+          results_revealed_categories?: string[]
           status?: string
+          timer_default_seconds?: number
+          timer_duration_seconds?: number
+          timer_paused_remaining_seconds?: number | null
           timer_started_at?: string | null
         }
         Relationships: []
@@ -117,39 +132,27 @@ export type Database = {
       }
       votes: {
         Row: {
+          criteria_scores: number[]
           id: string
           participant_id: string
-          pitch_index: number
-          score_functionality: number
-          score_innovation: number
-          score_pitch: number
-          score_technicality: number
           session_id: string
           submitted_at: string
           team_id: string
           total_score: number | null
         }
         Insert: {
+          criteria_scores: number[]
           id?: string
           participant_id: string
-          pitch_index: number
-          score_functionality: number
-          score_innovation: number
-          score_pitch: number
-          score_technicality: number
           session_id: string
           submitted_at?: string
           team_id: string
           total_score?: number | null
         }
         Update: {
+          criteria_scores?: number[]
           id?: string
           participant_id?: string
-          pitch_index?: number
-          score_functionality?: number
-          score_innovation?: number
-          score_pitch?: number
-          score_technicality?: number
           session_id?: string
           submitted_at?: string
           team_id?: string
@@ -185,6 +188,10 @@ export type Database = {
     }
     Functions: {
       generate_join_code: { Args: never; Returns: string }
+      start_pitch: {
+        Args: { p_session_id: string; p_team_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

@@ -1,5 +1,5 @@
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import { ArrowLeft, Settings, Users, Mic, Radio } from "lucide-react";
+import { ArrowLeft, Settings, Users, Mic, Radio, Trophy } from "lucide-react";
 import { JoinCodeDisplay } from "@/components/JoinCodeDisplay";
 import { SessionStatusBadge } from "@/components/SessionStatusBadge";
 import { cn } from "@/lib/utils";
@@ -10,12 +10,15 @@ interface AdminSessionLayoutProps {
   sessionCode?: string;
   status?: "setup" | "active" | "closed";
   isLive?: boolean;
+  containerClassName?: string;
+  contentClassName?: string;
 }
 
 const TABS = [
   { key: "setup", label: "Setup", icon: Settings, path: "setup" },
   { key: "lobby", label: "Lobby", icon: Users, path: "lobby" },
   { key: "pitch", label: "Pitch", icon: Mic, path: "pitch" },
+  { key: "results", label: "Results", icon: Trophy, path: "results" },
 ] as const;
 
 export function AdminSessionLayout({
@@ -24,6 +27,8 @@ export function AdminSessionLayout({
   sessionCode = "HACK24",
   status = "active",
   isLive = false,
+  containerClassName,
+  contentClassName,
 }: AdminSessionLayoutProps) {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -35,7 +40,7 @@ export function AdminSessionLayout({
     <div className="min-h-screen flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-sm border-b">
-        <div className="max-w-[480px] mx-auto px-4">
+        <div className={cn("max-w-[480px] mx-auto px-4", containerClassName)}>
           {/* Top row: back + session info */}
           <div className="flex items-center gap-3 py-3">
             <button
@@ -87,7 +92,7 @@ export function AdminSessionLayout({
 
       {/* Content */}
       <main className="flex-1">
-        <div className="max-w-[480px] mx-auto px-4 py-5">
+        <div className={cn("max-w-[480px] mx-auto px-4 py-5", containerClassName, contentClassName)}>
           {children}
         </div>
       </main>
