@@ -124,6 +124,7 @@
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
 | G17 | CSV export is restructured so that columns are grouped by team then by category, rows are individual voters, and the last row contains the per-column average. Format example:<br><br>`(blank),(blank),Team 1,,,,Team 2,,,`<br>`(blank),Cat1,Cat2,Cat3,Overall,Cat1,Cat2,Cat3,Overall`<br>`Voter1,x,x,x,x,x,x,x,x`<br>`Voter2,x,x,x,x,x,x,x,x`<br>`Avg,AvgT1C1,AvgT1C2,AvgT1C3,AvgT1,AvgT2C1,AvgT2C2,AvgT2C3,AvgT2` | 🟡 | [ ] |
+| G18 | Admin can manually mark a voter as **excluded** from the session. An excluded voter's scores are omitted from **all** team averages (not just the teams they missed), preserving fairness — it is unfair to count a voter's score for Team A but not Team B. If the admin does not mark a voter as excluded, their submitted votes continue to count normally in the averages. The exclusion can be toggled at any point before results are revealed. | 🔴 | [ ] |
 
 ---
 
