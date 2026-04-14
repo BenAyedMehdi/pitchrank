@@ -71,6 +71,62 @@
 
 ---
 
+## Phase 4 — UX Improvements & Polish
+
+### Admin — Sessions page
+
+| ID | Story | Priority | Done |
+|----|-------|----------|------|
+| G1 | Admin sessions list has an improved responsive layout for both desktop and mobile (better spacing, card or table layout that adapts to screen size) | 🔴 | [ ] |
+| G2 | Admin can delete a session from the sessions list (with a confirmation dialog to prevent accidental deletion) | 🔴 | [ ] |
+
+### Admin — Create / Edit Session page
+
+| ID | Story | Priority | Done |
+|----|-------|----------|------|
+| G3 | Create session page is fully responsive and fills the entire screen width on desktop, consistent with the layout of other admin tabs | 🔴 | [ ] |
+| G4 | Creating criteria and teams is more user-friendly: inline editing, clearer labels, better spacing, and intuitive add/remove controls | 🔴 | [ ] |
+| G5 | Admin can reorder teams via drag-and-drop (or up/down arrow buttons) in the create/edit session page | 🔴 | [ ] |
+
+### Admin — Pitch tab
+
+| ID | Story | Priority | Done |
+|----|-------|----------|------|
+| G6 | When a pitch starts the countdown timer does **not** start automatically — it only starts when the admin explicitly triggers it (after the team has finished pitching), giving voters 1 minute to finalise their scores | 🔴 | [ ] |
+| G7 | The status indicator next to a team name in the pitch tab shows a **yellow "in-progress" icon** while at least one voter has not yet submitted a vote, and switches to a **green tick** only once **all** voters have submitted their vote | 🔴 | [ ] |
+| G8 | Each team is assigned a distinct random colour from a predefined palette of clear, readable colours; these colours are consistently used in the pitch tab and the results page to visually differentiate teams | 🟡 | [ ] |
+
+### Voter — Join screen
+
+| ID | Story | Priority | Done |
+|----|-------|----------|------|
+| G9 | When a voter tries to join with a name that already exists in the session, they are shown an error message and asked to enter a different name before proceeding | 🔴 | [ ] |
+
+### Voter — Voting view
+
+| ID | Story | Priority | Done |
+|----|-------|----------|------|
+| G10 | After submitting a vote, a voter can edit their scores for that pitch as long as the admin has not yet closed voting for that team (i.e. the voting session for that pitch is still open) | 🔴 | [ ] |
+
+### Admin — Results page
+
+| ID | Story | Priority | Done |
+|----|-------|----------|------|
+| G11 | All scores displayed are **averages** (0–5 scale, e.g. 4.32) so that differences in voter turnout do not unfairly influence rankings | 🔴 | [ ] |
+| G12 | Results page shows the **top 5 teams** for each category, ranked by their average score | 🔴 | [ ] |
+| G13 | Admin can **manually select a winner** for each category from the ranked list (to handle the rule that a team cannot win more than one category); the UI clearly shows which teams are already assigned a win in another category | 🔴 | [ ] |
+| G14 | The option to reveal individual category results separately is **removed**; instead, once the admin has selected winners for all categories, a single "Reveal All Results" button broadcasts the complete results to all participants simultaneously | 🔴 | [ ] |
+| G15 | The admin results page has an improved layout optimised for laptop use: clear hierarchy, readable tables, winner cards, and good use of horizontal space | 🟡 | [ ] |
+| G16 | Team colours (defined in G8) are used consistently on the results page to visually link scores and winner cards back to the correct team | 🟡 | [ ] |
+
+### CSV Export
+
+| ID | Story | Priority | Done |
+|----|-------|----------|------|
+| G17 | CSV export is restructured so that columns are grouped by team then by category, rows are individual voters, and the last row contains the per-column average. Format example:<br><br>`(blank),(blank),Team 1,,,,Team 2,,,`<br>`(blank),Cat1,Cat2,Cat3,Overall,Cat1,Cat2,Cat3,Overall`<br>`Voter1,x,x,x,x,x,x,x,x`<br>`Voter2,x,x,x,x,x,x,x,x`<br>`Avg,AvgT1C1,AvgT1C2,AvgT1C3,AvgT1,AvgT2C1,AvgT2C2,AvgT2C3,AvgT2` | 🟡 | [ ] |
+
+---
+
 ## Nice-to-haves (no phase assigned)
 
 | ID | Story | Priority |
