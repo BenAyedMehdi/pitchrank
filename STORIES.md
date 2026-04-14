@@ -25,7 +25,7 @@
 
 ---
 
-## Phase 2 — Pitch control & voting 🟡 In progress
+## Phase 2 — Pitch control & voting ✅ Complete
 
 ### Admin — pitch control (Supabase-backed, partial flow live)
 
@@ -37,8 +37,8 @@
 | B4 | Admin sees in real time who has voted and who hasn't for current pitch | 🔴 | [x] |
 | B5 | Admin sees vote count, percentage, and pending voter list | 🔴 | [x] |
 | B6 | Admin closes voting for current team | 🔴 | [X] |
-| B7 | Admin advances to next team | 🔴 | [ ] |
-| B8 | Admin can pause or extend the timer | 🟡 | [ ] |
+| B7 | Admin advances to next team | 🔴 | [X] |
+| B8 | Admin can pause or extend the timer | 🟡 | [X] |
 
 ### Participant — voting
 
@@ -56,18 +56,18 @@
 
 ---
 
-## Phase 3 — Results
+## Phase 3 — Results ✅ Complete
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
 | C1 | Admin sees full results table: avg scores per team per criterion | 🔴 | [X] |
-| C2 | Admin sees top 3 winners per category (Overall, Technical, Pitch, Functionality, Innovation) | 🔴 | [ ] |
-| C3 | Admin reveals results to all participants with one button | 🔴 | [ ] |
-| F1 | All participant screens update simultaneously to show results | 🔴 | [ ] |
-| F2 | Participant can view their own submitted ratings | 🔴 | [ ] |
-| C4 | Admin can export results as CSV or PDF | 🟡 | [ ] |
-| C5 | Admin sees individual voter breakdown (who gave what to whom) | 🟡 | [ ] |
-| F3 | Results page is shareable via link | 🟡 | [ ] |
+| C2 | Admin sees top 3 winners per category (Overall, Technical, Pitch, Functionality, Innovation) | 🔴 | [X] |
+| C3 | Admin reveals results to all participants with one button | 🔴 | [X] |
+| F1 | All participant screens update simultaneously to show results | 🔴 | [X] |
+| F2 | Participant can view their own submitted ratings | 🔴 | [X] |
+| C4 | Admin can export results as CSV or PDF | 🟡 | [X] |
+| C5 | Admin sees individual voter breakdown (who gave what to whom) | 🟡 | [X] |
+| F3 | Results page is shareable via link | 🟡 | [X] |
 
 ---
 

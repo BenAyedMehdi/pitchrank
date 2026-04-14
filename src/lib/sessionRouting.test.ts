@@ -43,7 +43,7 @@ describe("getParticipantRoute", () => {
     }, 70_000)).toBe("/lobby");
   });
 
-  it("returns lobby for non-active session states", () => {
+  it("returns lobby for setup and results route for closed states", () => {
     expect(getParticipantRoute({
       status: "setup",
       current_pitch_index: 2,
@@ -57,14 +57,14 @@ describe("getParticipantRoute", () => {
       timer_started_at: null,
       timer_duration_seconds: 60,
       timer_paused_remaining_seconds: null,
-    }, 10_000)).toBe("/lobby");
+    }, 10_000)).toBe("/results");
     expect(getParticipantRoute({
       status: "results_revealed",
       current_pitch_index: 2,
       timer_started_at: null,
       timer_duration_seconds: 60,
       timer_paused_remaining_seconds: null,
-    }, 10_000)).toBe("/lobby");
+    }, 10_000)).toBe("/results");
   });
 
   it("keeps voting route while timer is paused with remaining seconds", () => {
