@@ -77,8 +77,8 @@
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G1 | Admin sessions list has an improved responsive layout for both desktop and mobile (better spacing, card or table layout that adapts to screen size) | 🔴 | [ ] |
-| G2 | Admin can delete a session from the sessions list (with a confirmation dialog to prevent accidental deletion) | 🔴 | [ ] |
+| G1 | Admin sessions list has an improved responsive layout for both desktop and mobile (better spacing, card or table layout that adapts to screen size) | 🔴 | [x] |
+| G2 | Admin can delete a session from the sessions list (with a confirmation dialog to prevent accidental deletion) | 🔴 | [x] |
 
 ### Admin — Create / Edit Session page
 
@@ -151,6 +151,13 @@
 
 ## Feature branch updates (latest)
 
+### Phase 4 — current branch
+- **G1** — Sessions list now uses a responsive card grid: single column on mobile → 2 columns on `md` → 3 columns on `lg`; each card shows the session creation date
+- **G2** — Trash icon added to every session card; clicking it opens a named `AlertDialog` warning that all related data (teams, participants, votes) will be permanently deleted; delete button is disabled during the in-flight request
+- **G18** — Story added: admin can manually exclude a voter so their scores are omitted from all team averages
+- Added `public/_redirects` so that Netlify/preview deployments serve `index.html` for all client-side routes (e.g. `/admin`, `/admin/sessions`) instead of returning 404
+
+### Earlier phases
 - Connected project to real Supabase (env-based client + migrations pushed)
 - Added DB function `start_pitch(session_id, team_id)` and wired admin "Start Pitch" action via RPC
 - Replaced `AdminPitchScreen` mock data with live Supabase data (`sessions`, `teams`, `participants`, `votes`)
