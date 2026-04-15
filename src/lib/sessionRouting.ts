@@ -7,11 +7,17 @@ export function isVotingOpen(
   session: Pick<Tables<"sessions">, "status" | "current_pitch_index" | "timer_started_at" | "timer_duration_seconds" | "timer_paused_remaining_seconds">,
   nowMs: number = Date.now(),
 ): boolean {
-  return (
-    session.status === "active" &&
-    session.current_pitch_index >= 0 &&
-    getSessionTimerRemaining(session, nowMs) > 0
-  );
+  if (session.status !== "active" || session.current_pitch_index < 0) return false;
+
+  // Timer has not been started yet — voting is open so participants can fill in
+  // scores while the team pitches; the countdown starts explicitly later (G6).
+  const noTimerStarted =
+    session.timer_started_at === null && session.timer_paused_remaining_seconds === null;
+  if (noTimerStarted) return true;
+
+  // Timer has been started (or is paused with remaining seconds) — keep voting
+  // open until the countdown reaches zero.
+  return getSessionTimerRemaining(session, nowMs) > 0;
 }
 
 export function getParticipantRoute(

@@ -7,20 +7,25 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
-import { isVotingOpen } from "@/lib/sessionRouting";
 import { cn } from "@/lib/utils";
 import { getSessionTimerRemaining, isTimerPaused } from "@/lib/timer";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 
-// Steps for the pitch flow
+// Steps for the pitch flow (G6: "Start Timer" is now a separate, explicit step)
 const STEPS = [
   {
     key: "start",
     label: "Start Pitch",
     icon: Timer,
-    helper: "Signals participants that this team's pitch has begun.",
+    helper: "Signals participants that this team's pitch has begun. They can start filling in scores.",
+  },
+  {
+    key: "timer",
+    label: "Start Timer",
+    icon: Play,
+    helper: "Starts the 1-minute countdown after the team finishes pitching.",
   },
   {
     key: "close",
@@ -46,6 +51,7 @@ export default function AdminPitchScreen() {
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [startingPitch, setStartingPitch] = useState(false);
+  const [startingTimer, setStartingTimer] = useState(false);
   const [stoppingPitch, setStoppingPitch] = useState(false);
   const [statsOpen, setStatsOpen] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
@@ -114,8 +120,11 @@ export default function AdminPitchScreen() {
   const activePitchIndex = session?.current_pitch_index ?? -1;
   const pitchSelected = session?.status === "active" && activePitchIndex >= 0;
   const timerRemaining = session ? getSessionTimerRemaining(session, nowMs) : 0;
-  const votingRunning = session ? isVotingOpen(session, nowMs) : false;
   const timerPaused = session ? isTimerPaused(session) : false;
+  // timerHasStarted: pitch is active AND admin has explicitly started the timer (G6)
+  const timerHasStarted =
+    pitchSelected &&
+    (session?.timer_started_at != null || session?.timer_paused_remaining_seconds != null);
   const currentPitchTeam = teams.find((team) => team.pitch_order === activePitchIndex) ?? null;
 
   const trackedTeam = selectedTeamRow ?? currentPitchTeam;
@@ -158,15 +167,35 @@ export default function AdminPitchScreen() {
     return ids;
   }, [votes, pitchSelected, currentPitchTeam?.id]);
 
+  // G7: per-team vote completion status
+  const teamVoteStatus = useMemo(() => {
+    const result = new Map<string, "all-voted" | "in-progress">();
+    for (const teamId of teamsWithStartedVoting) {
+      const team = teams.find((t) => t.id === teamId);
+      if (!team) continue;
+      const teamVotedIds = new Set(
+        votes.filter((v) => v.team_id === teamId).map((v) => v.participant_id),
+      );
+      // Eligible = everyone who is NOT a (non-observer) member of the pitching team
+      const eligible = participants.filter((p) => p.is_observer || p.team_id !== team.id);
+      const allVoted =
+        eligible.length > 0 && eligible.every((p) => teamVotedIds.has(p.id));
+      result.set(teamId, allVoted ? "all-voted" : "in-progress");
+    }
+    return result;
+  }, [teams, votes, participants, teamsWithStartedVoting]);
+
   const pitchesCompleted = session && session.current_pitch_index >= 0 ? session.current_pitch_index + 1 : 0;
-  const activeStep = votingRunning ? 1 : 0;
+  // activeStep: 0=start pitch, 1=start timer, 2=close voting, 3=next team (G6)
+  const activeStep = !pitchSelected ? 0 : !timerHasStarted ? 1 : 2;
 
   useEffect(() => {
-    if (!votingRunning || timerPaused) return;
+    // Only tick the clock while the timer is actively counting down
+    if (!timerHasStarted || timerPaused) return;
 
     const interval = window.setInterval(() => setNowMs(Date.now()), 250);
     return () => window.clearInterval(interval);
-  }, [votingRunning, timerPaused]);
+  }, [timerHasStarted, timerPaused]);
 
   const handleStartPitch = async () => {
     if (!id || !selectedTeamRow) return;
@@ -182,7 +211,17 @@ export default function AdminPitchScreen() {
       return;
     }
 
-    const { error: timerError } = await supabase
+    await loadData(id);
+    setNowMs(Date.now());
+    setStartingPitch(false);
+    toast.success(`Pitch started for ${selectedTeamRow.name}`);
+  };
+
+  // G6: timer starts only when the admin explicitly triggers it
+  const handleStartTimer = async () => {
+    if (!id || !pitchSelected || timerHasStarted) return;
+    setStartingTimer(true);
+    const { error } = await supabase
       .from("sessions")
       .update({
         timer_started_at: new Date().toISOString(),
@@ -191,17 +230,17 @@ export default function AdminPitchScreen() {
       })
       .eq("id", id);
 
-    if (timerError) {
-      console.error("Failed to start voting timer:", timerError);
-      toast.error(timerError.message || "Failed to start voting timer");
-      setStartingPitch(false);
+    if (error) {
+      console.error("Failed to start timer:", error);
+      toast.error(error.message || "Failed to start timer");
+      setStartingTimer(false);
       return;
     }
 
     await loadData(id);
     setNowMs(Date.now());
-    setStartingPitch(false);
-    toast.success(`Voting started for ${selectedTeamRow.name}`);
+    setStartingTimer(false);
+    toast.success("1-minute voting timer started");
   };
 
   const handleStopVoting = async () => {
@@ -231,7 +270,7 @@ export default function AdminPitchScreen() {
   };
 
   const handlePauseTimer = async () => {
-    if (!id || !session || !votingRunning || timerPaused) return;
+    if (!id || !session || !timerHasStarted || timerPaused) return;
 
     const remaining = getSessionTimerRemaining(session, Date.now());
     const { error } = await supabase
@@ -254,7 +293,7 @@ export default function AdminPitchScreen() {
   };
 
   const handleResumeTimer = async () => {
-    if (!id || !session || !votingRunning || !timerPaused) return;
+    if (!id || !session || !timerHasStarted || !timerPaused) return;
 
     const remaining = session.timer_paused_remaining_seconds ?? 0;
     const duration = session.timer_duration_seconds ?? 60;
@@ -329,19 +368,21 @@ export default function AdminPitchScreen() {
         <div className="rounded-2xl border bg-card px-4 py-5 md:px-6 md:py-6">
           <div className="text-center space-y-1">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-              {votingRunning
+              {pitchSelected
                 ? `Pitch ${activePitchIndex + 1} of ${teams.length}`
                 : `No pitch started yet${teams.length > 0 ? ` · ${teams.length} teams ready` : ""}`}
             </p>
             <h2 className="font-heading text-2xl md:text-3xl font-bold">
-              {votingRunning ? currentPitchTeam?.name : selectedTeamRow?.name ?? "No teams configured"}
+              {pitchSelected ? currentPitchTeam?.name : selectedTeamRow?.name ?? "No teams configured"}
             </h2>
             <p className="text-xs text-muted-foreground">
-              {votingRunning
-                ? timerPaused
-                  ? `Pitch started · Timer paused at ${timerRemaining}s`
-                  : `Pitch started · Timer ${timerRemaining}s`
-                : "Select a team and press Start Pitch"}
+              {!pitchSelected
+                ? "Select a team and press Start Pitch"
+                : !timerHasStarted
+                  ? `Pitch in progress · Press "Start Timer" when team is done pitching`
+                  : timerPaused
+                    ? `Timer paused · ${timerRemaining}s remaining`
+                    : `Timer running · ${timerRemaining}s remaining`}
             </p>
           </div>
         </div>
@@ -355,18 +396,25 @@ export default function AdminPitchScreen() {
                 onClick={() => setSelectedTeam(i)}
                 className={cn(
                   "relative shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
-                  votingRunning && i === activePitchIndex && "border-success text-success bg-success/10",
+                  pitchSelected && i === activePitchIndex && "border-success text-success bg-success/10",
                   i === selectedTeam
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-foreground/20"
                 )}
               >
                 {team.name}
-                {votingRunning && i === activePitchIndex ? " (running)" : ""}
-                {teamsWithStartedVoting.has(team.id) ? (
-                  <span className="absolute -top-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-success text-success-foreground border border-background">
-                    <CheckCircle2 className="w-3 h-3" />
-                  </span>
+                {pitchSelected && i === activePitchIndex ? " (pitching)" : ""}
+                {/* G7: yellow = in-progress, green = all voters submitted */}
+                {teamVoteStatus.has(team.id) ? (
+                  teamVoteStatus.get(team.id) === "all-voted" ? (
+                    <span className="absolute -top-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-success text-success-foreground border border-background">
+                      <CheckCircle2 className="w-3 h-3" />
+                    </span>
+                  ) : (
+                    <span className="absolute -top-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-yellow-500 text-white border border-background">
+                      <Clock className="w-3 h-3" />
+                    </span>
+                  )
                 ) : null}
               </button>
             ))}
@@ -400,12 +448,17 @@ export default function AdminPitchScreen() {
                         (step.key === "start" &&
                           (!selectedTeamRow ||
                             startingPitch ||
-                            (votingRunning && currentPitchTeam?.id === selectedTeamRow?.id))) ||
-                        (step.key === "close" && (!votingRunning || stoppingPitch))
+                            (pitchSelected && currentPitchTeam?.id === selectedTeamRow?.id))) ||
+                        (step.key === "timer" && (!pitchSelected || timerHasStarted || startingTimer)) ||
+                        (step.key === "close" && (!pitchSelected || stoppingPitch))
                       }
                       onClick={() => {
                         if (step.key === "start") {
                           void handleStartPitch();
+                          return;
+                        }
+                        if (step.key === "timer") {
+                          void handleStartTimer();
                           return;
                         }
                         if (step.key === "close") {
@@ -420,11 +473,13 @@ export default function AdminPitchScreen() {
                       ) : (
                         <step.icon className="w-4 h-4" />
                       )}
-                      {step.key === "start" && votingRunning && currentPitchTeam?.id === selectedTeamRow?.id
-                        ? "Pitch is running now"
-                        : step.key === "close" && votingRunning
-                          ? `Stop voting (${timerRemaining}s)`
-                          : step.label}
+                      {step.key === "start" && pitchSelected && currentPitchTeam?.id === selectedTeamRow?.id
+                        ? "Pitch in progress"
+                        : step.key === "timer" && startingTimer
+                          ? "Starting timer…"
+                          : step.key === "close" && timerHasStarted
+                            ? `Close voting (${timerRemaining}s)`
+                            : step.label}
                     </Button>
                     <p className="text-[10px] text-muted-foreground pl-1">{step.helper}</p>
                   </div>
@@ -435,7 +490,7 @@ export default function AdminPitchScreen() {
               <Button
                 variant="outline"
                 className="w-full h-10 justify-start gap-2 text-sm"
-                disabled={!votingRunning || timerPaused}
+                disabled={!timerHasStarted || timerPaused}
                 onClick={() => void handlePauseTimer()}
               >
                 <Pause className="w-4 h-4" />
@@ -444,7 +499,7 @@ export default function AdminPitchScreen() {
               <Button
                 variant="outline"
                 className="w-full h-10 justify-start gap-2 text-sm"
-                disabled={!votingRunning || !timerPaused}
+                disabled={!timerHasStarted || !timerPaused}
                 onClick={() => void handleResumeTimer()}
               >
                 <Play className="w-4 h-4" />
@@ -453,7 +508,7 @@ export default function AdminPitchScreen() {
               <Button
                 variant="outline"
                 className="w-full h-10 justify-start gap-2 text-sm"
-                disabled={!pitchSelected}
+                disabled={!timerHasStarted}
                 onClick={() => void handleExtendTimer()}
               >
                 <Plus className="w-4 h-4" />
