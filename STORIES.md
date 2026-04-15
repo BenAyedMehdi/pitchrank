@@ -84,16 +84,16 @@
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G3 | Create session page is fully responsive and fills the entire screen width on desktop, consistent with the layout of other admin tabs | 🔴 | [ ] |
-| G4 | Creating criteria and teams is more user-friendly: inline editing, clearer labels, better spacing, and intuitive add/remove controls | 🔴 | [ ] |
-| G5 | Admin can reorder teams via drag-and-drop (or up/down arrow buttons) in the create/edit session page | 🔴 | [ ] |
+| G3 | Create session page is fully responsive and fills the entire screen width on desktop, consistent with the layout of other admin tabs | 🔴 | [x] |
+| G4 | Creating criteria and teams is more user-friendly: inline editing, clearer labels, better spacing, and intuitive add/remove controls | 🔴 | [x] |
+| G5 | Admin can reorder teams via drag-and-drop (or up/down arrow buttons) in the create/edit session page | 🔴 | [x] |
 
 ### Admin — Pitch tab
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G6 | When a pitch starts the countdown timer does **not** start automatically — it only starts when the admin explicitly triggers it (after the team has finished pitching), giving voters 1 minute to finalise their scores | 🔴 | [ ] |
-| G7 | The status indicator next to a team name in the pitch tab shows a **yellow "in-progress" icon** while at least one voter has not yet submitted a vote, and switches to a **green tick** only once **all** voters have submitted their vote | 🔴 | [ ] |
+| G6 | When a pitch starts the countdown timer does **not** start automatically — it only starts when the admin explicitly triggers it (after the team has finished pitching), giving voters 1 minute to finalise their scores | 🔴 | [x] |
+| G7 | The status indicator next to a team name in the pitch tab shows a **yellow "in-progress" icon** while at least one voter has not yet submitted a vote, and switches to a **green tick** only once **all** voters have submitted their vote | 🔴 | [x] |
 | G8 | Each team is assigned a distinct random colour from a predefined palette of clear, readable colours; these colours are consistently used in the pitch tab and the results page to visually differentiate teams | 🟡 | [ ] |
 
 ### Voter — Join screen
@@ -154,6 +154,11 @@
 ### Phase 4 — current branch
 - **G1** — Sessions list now uses a responsive card grid: single column on mobile → 2 columns on `md` → 3 columns on `lg`; each card shows the session creation date
 - **G2** — Trash icon added to every session card; clicking it opens a named `AlertDialog` warning that all related data (teams, participants, votes) will be permanently deleted; delete button is disabled during the in-flight request
+- **G3** — `AdminNewSessionScreen` is now fully responsive: expands to a two-column desktop layout (`max-w-5xl`) matching the width of other admin tabs; `AdminSetupScreen` uses `containerClassName="max-w-[1100px]"` consistent with Pitch/Lobby/Results
+- **G4** — Both create and edit (setup) screens now feature numbered criterion badges, dashed "Add criteria" button, `X` icon remove buttons, filled-count badge, and an empty-state placeholder for the teams list; desktop layout splits Teams and Criteria into side-by-side card panels
+- **G5** — Team list in `AdminSetupScreen` includes `ChevronUp`/`ChevronDown` buttons per row; clicking reorders teams optimistically in UI and persists new `pitch_order` to Supabase via `upsert`; first/last items disable the corresponding direction button
+- **G6** — Timer no longer starts automatically when a pitch begins. `handleStartPitch` only calls the `start_pitch` RPC (opens voting for participants); a new explicit "Start Timer" step in the pitch-flow card triggers the 1-minute countdown. `isVotingOpen` updated to return `true` when pitch is active but no timer has started yet, so participants can begin filling in scores immediately
+- **G7** — Team pill badges in the Pitch tab now use a yellow clock icon while ≥1 eligible voter has not yet submitted, and switch to a green checkmark only when every eligible voter has voted for that team
 - **G18** — Story added: admin can manually exclude a voter so their scores are omitted from all team averages
 - Added `public/_redirects` so that Netlify/preview deployments serve `index.html` for all client-side routes (e.g. `/admin`, `/admin/sessions`) instead of returning 404
 
