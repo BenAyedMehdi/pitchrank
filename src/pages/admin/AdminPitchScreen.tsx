@@ -309,7 +309,7 @@ export default function AdminPitchScreen() {
 
   if (loading) {
     return (
-      <AdminSessionLayout>
+      <AdminSessionLayout containerClassName="max-w-[1100px]">
         <div className="py-10 text-sm text-muted-foreground text-center">Loading pitch data...</div>
       </AdminSessionLayout>
     );
