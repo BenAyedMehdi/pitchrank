@@ -15,6 +15,8 @@ import {
   Pause,
   Play,
   Plus,
+  UserX,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -116,6 +118,9 @@ export default function AdminPitchScreen() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "participants", filter: `session_id=eq.${id}` }, () => {
         void loadData(id);
       })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "participants", filter: `session_id=eq.${id}` }, () => {
+        void loadData(id);
+      })
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "votes", filter: `session_id=eq.${id}` }, (payload) => {
         const insertedVote = payload.new as Tables<"votes">;
         setVotes((prev) => (prev.some((v) => v.id === insertedVote.id) ? prev : [...prev, insertedVote]));
@@ -156,6 +161,7 @@ export default function AdminPitchScreen() {
           : "No team",
       isTeamMember: Boolean(trackedTeam && !p.is_observer && p.team_id === trackedTeam.id),
       voted: votedIds.has(p.id),
+      isExcluded: Boolean(p.is_excluded),
     }));
   }, [participants, trackedTeam, votedIds]);
 
@@ -167,11 +173,12 @@ export default function AdminPitchScreen() {
     return filtered.sort((a, b) => Number(a.voted) - Number(b.voted));
   }, [allVoterRows, filter]);
 
-  const eligibleVoters = allVoterRows.filter((v) => !v.isTeamMember);
+  const eligibleVoters = allVoterRows.filter((v) => !v.isTeamMember && !v.isExcluded);
   const votedCount = eligibleVoters.filter((v) => v.voted).length;
   const totalVoters = eligibleVoters.length;
   const percentage = totalVoters === 0 ? 0 : Math.round((votedCount / totalVoters) * 100);
   const teamMemberCount = allVoterRows.filter((v) => v.isTeamMember).length;
+  const excludedCount = allVoterRows.filter((v) => !v.isTeamMember && v.isExcluded).length;
 
   const teamsWithStartedVoting = useMemo(() => {
     const ids = new Set(votes.map((vote) => vote.team_id));
@@ -187,7 +194,9 @@ export default function AdminPitchScreen() {
       if (!team) continue;
 
       const teamVotedIds = new Set(votes.filter((v) => v.team_id === teamId).map((v) => v.participant_id));
-      const eligible = participants.filter((p) => p.is_observer || p.team_id !== team.id);
+      const eligible = participants.filter(
+        (p) => !p.is_excluded && (p.is_observer || p.team_id !== team.id),
+      );
       const allVoted = eligible.length > 0 && eligible.every((p) => teamVotedIds.has(p.id));
       result.set(teamId, allVoted ? "all-voted" : "in-progress");
     }
@@ -364,6 +373,22 @@ export default function AdminPitchScreen() {
     await loadData(id);
     setNowMs(Date.now());
     toast.success("Timer extended by 30 seconds");
+  };
+
+  const handleToggleExclusion = async (participantId: string, currentlyExcluded: boolean) => {
+    const { error } = await supabase
+      .from("participants")
+      .update({ is_excluded: !currentlyExcluded })
+      .eq("id", participantId);
+
+    if (error) {
+      console.error("Failed to toggle voter exclusion:", error);
+      toast.error(error.message || "Failed to update voter status");
+      return;
+    }
+
+    await loadData(id!);
+    toast.success(currentlyExcluded ? "Voter included: their scores will count again." : "Voter excluded: their scores are omitted from all averages.");
   };
 
   const statusMap = (s: string | undefined) => {
@@ -566,6 +591,12 @@ export default function AdminPitchScreen() {
                     {teamMemberCount} team member{teamMemberCount > 1 ? "s" : ""} excluded from voting count
                   </div>
                 ) : null}
+                {excludedCount > 0 ? (
+                  <div className="flex items-center gap-1.5 text-[10px] text-destructive/70">
+                    <UserX className="h-3 w-3" />
+                    {excludedCount} voter{excludedCount > 1 ? "s" : ""} manually excluded: scores omitted from all averages
+                  </div>
+                ) : null}
                 <Progress value={percentage} className="h-2" />
                 <p className="text-right text-[10px] text-muted-foreground">{percentage}%</p>
               </div>
@@ -591,7 +622,10 @@ export default function AdminPitchScreen() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    className="flex items-center justify-between rounded-lg px-2.5 py-2 transition-colors hover:bg-muted/50"
+                    className={cn(
+                      "flex items-center justify-between rounded-lg px-2.5 py-2 transition-colors hover:bg-muted/50",
+                      voter.isExcluded && "opacity-50",
+                    )}
                   >
                     <div className="flex items-center gap-2.5">
                       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
@@ -611,6 +645,19 @@ export default function AdminPitchScreen() {
                           </span>
                           <Clock className="h-4 w-4 text-yellow-700" />
                         </>
+                      ) : voter.isExcluded ? (
+                        <>
+                          <span className="rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                            Excluded
+                          </span>
+                          <button
+                            title="Re-include voter"
+                            onClick={() => void handleToggleExclusion(voter.id, true)}
+                            className="rounded p-0.5 text-muted-foreground hover:text-foreground"
+                          >
+                            <UserCheck className="h-4 w-4" />
+                          </button>
+                        </>
                       ) : (
                         <>
                           <span
@@ -628,6 +675,13 @@ export default function AdminPitchScreen() {
                           ) : (
                             <Clock className="h-4 w-4 text-muted-foreground" />
                           )}
+                          <button
+                            title="Exclude voter"
+                            onClick={() => void handleToggleExclusion(voter.id, false)}
+                            className="rounded p-0.5 text-muted-foreground hover:text-destructive"
+                          >
+                            <UserX className="h-4 w-4" />
+                          </button>
                         </>
                       )}
                     </div>

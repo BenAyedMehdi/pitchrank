@@ -17,6 +17,7 @@ export type Database = {
       participants: {
         Row: {
           id: string
+          is_excluded: boolean
           is_observer: boolean
           joined_at: string
           name: string
@@ -25,6 +26,7 @@ export type Database = {
         }
         Insert: {
           id?: string
+          is_excluded?: boolean
           is_observer?: boolean
           joined_at?: string
           name: string
@@ -33,6 +35,7 @@ export type Database = {
         }
         Update: {
           id?: string
+          is_excluded?: boolean
           is_observer?: boolean
           joined_at?: string
           name?: string

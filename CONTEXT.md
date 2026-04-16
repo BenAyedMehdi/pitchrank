@@ -66,6 +66,7 @@ A real-time web app for live hackathon events. ~36 people in one room. 12 teams 
 | `name` | text | |
 | `team_id` | uuid FK nullable | Null if observer |
 | `is_observer` | boolean | |
+| `is_excluded` | boolean | Admin-toggled; excluded voter's scores omitted from all team averages |
 | `joined_at` | timestamptz | |
 
 ### `votes`
@@ -170,6 +171,7 @@ VITE_ADMIN_PASSWORD=
 9. Participant identity stored in localStorage as `hackathon_participant`
 10. Admin auth stored in localStorage as `hackathon_admin_auth`
 11. Session must have at least 2 admin-defined criteria before activation
+12. Voter exclusion: admin can mark any participant (non-team-member) as excluded via the Pitch tab; excluded scores are omitted from ALL team averages (not just teams they didn't vote for); exclusion is togglable and persists in `participants.is_excluded`
 
 ---
 
