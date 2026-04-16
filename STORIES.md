@@ -106,7 +106,7 @@
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G10 | After submitting a vote, a voter can edit their scores for that pitch as long as the admin has not yet closed voting for that team (i.e. the voting session for that pitch is still open) | 🔴 | [ ] |
+| G10 | After submitting a vote, a voter can edit their scores for that pitch as long as the admin has not yet closed voting for that team (i.e. the voting session for that pitch is still open) | 🔴 | [x] |
 
 ### Admin — Results page
 
