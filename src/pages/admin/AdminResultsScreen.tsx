@@ -520,7 +520,11 @@ export default function AdminResultsScreen() {
                   .filter((vote) => vote.team_id === selectedTeamId)
                   .map((vote) => {
                     const categoryScore = category.key === "overall"
-                      ? vote.criteria_scores.reduce((sum, score) => sum + score, 0)
+                      ? (
+                        vote.criteria_scores.length === 0
+                          ? 0
+                          : vote.criteria_scores.reduce((sum, score) => sum + score, 0) / vote.criteria_scores.length
+                      )
                       : vote.criteria_scores[Number(category.key.replace("criterion-", ""))] ?? 0;
                     return {
                       voteId: vote.id,
@@ -632,7 +636,7 @@ export default function AdminResultsScreen() {
                                   {selectedTeamVotes.map((row) => (
                                     <div key={row.voteId} className="flex items-center justify-between text-sm">
                                       <span>{row.voterName}</span>
-                                      <span className="font-semibold tabular-nums">{row.categoryScore}</span>
+                                      <span className="font-semibold tabular-nums">{formatScore(row.categoryScore)}</span>
                                     </div>
                                   ))}
                                 </div>

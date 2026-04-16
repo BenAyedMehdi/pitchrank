@@ -112,7 +112,7 @@
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G11 | All scores displayed are **averages** (0–5 scale, e.g. 4.32) so that differences in voter turnout do not unfairly influence rankings | 🔴 | [ ] |
+| G11 | All scores displayed are **averages** (0–5 scale, e.g. 4.32) so that differences in voter turnout do not unfairly influence rankings | 🔴 | [x] |
 | G12 | Results page shows the **top 5 teams** for each category, ranked by their average score | 🔴 | [ ] |
 | G13 | Admin can **manually select a winner** for each category from the ranked list (to handle the rule that a team cannot win more than one category); the UI clearly shows which teams are already assigned a win in another category | 🔴 | [ ] |
 | G14 | The option to reveal individual category results separately is **removed**; instead, once the admin has selected winners for all categories, a single "Reveal All Results" button broadcasts the complete results to all participants simultaneously | 🔴 | [ ] |

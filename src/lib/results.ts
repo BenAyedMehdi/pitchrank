@@ -60,7 +60,7 @@ export function buildTeamResults(
       teamName: team.name,
       voteCount: teamVotes.length,
       criterionAverages,
-      overall: criterionAverages.reduce((sum, value) => sum + value, 0),
+      overall: average(criterionAverages),
     };
   });
 }
@@ -68,7 +68,6 @@ export function buildTeamResults(
 export function sortTeamResultsByOverall(teamResults: TeamResult[]): TeamResult[] {
   return [...teamResults].sort((a, b) => {
     if (b.overall !== a.overall) return b.overall - a.overall;
-    if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
     return a.teamName.localeCompare(b.teamName);
   });
 }
@@ -81,7 +80,7 @@ export function buildResultsCategories(
     {
       key: OVERALL_CATEGORY_KEY,
       label: "Overall",
-      maxScore: Math.max(1, criteriaDisplayLabels.length * 5),
+      maxScore: 5,
       winners: [],
       scoreFor: (team) => team.overall,
     },
@@ -99,7 +98,6 @@ export function buildResultsCategories(
       .sort((a, b) => {
         const scoreDiff = category.scoreFor(b) - category.scoreFor(a);
         if (scoreDiff !== 0) return scoreDiff;
-        if (b.voteCount !== a.voteCount) return b.voteCount - a.voteCount;
         return a.teamName.localeCompare(b.teamName);
       })
       .slice(0, 3);
