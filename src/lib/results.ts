@@ -46,9 +46,12 @@ export function buildTeamResults(
   teams: Tables<"teams">[],
   votes: Tables<"votes">[],
   criteriaDisplayLabels: string[],
+  excludedParticipantIds?: Set<string>,
 ): TeamResult[] {
   return teams.map((team) => {
-    const teamVotes = votes.filter((vote) => vote.team_id === team.id);
+    const teamVotes = votes
+      .filter((vote) => vote.team_id === team.id)
+      .filter((vote) => !excludedParticipantIds?.has(vote.participant_id));
     const criterionAverages = criteriaDisplayLabels.map((_, criterionIndex) => {
       const criterionScores = teamVotes
         .map((vote) => vote.criteria_scores?.[criterionIndex])
