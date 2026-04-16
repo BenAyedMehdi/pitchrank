@@ -53,9 +53,6 @@ export default function PublicResultsScreen() {
       .on("postgres_changes", { event: "*", schema: "public", table: "teams", filter: `session_id=eq.${id}` }, () => {
         void loadData(id);
       })
-      .on("postgres_changes", { event: "*", schema: "public", table: "participants", filter: `session_id=eq.${id}` }, () => {
-        void loadData(id);
-      })
       .subscribe();
 
     return () => {
