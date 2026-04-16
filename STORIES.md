@@ -52,7 +52,7 @@
 | E6 | Participant sees a between-pitches waiting screen after voting | 🔴 | [X] |
 | E7 | Participant can add optional short comment per team | 🟡 | [ ] |
 | E8 | Participant can edit vote before timer ends or admin advances | 🟡 | [X] |
-| D4 | Participant can rejoin and be restored to correct screen if tab is closed | 🟡 | [ ] |
+| D4 | Participant can rejoin and be restored to correct screen if tab is closed | 🟡 | [X] |
 
 ---
 
