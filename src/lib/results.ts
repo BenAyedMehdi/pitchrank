@@ -1,6 +1,7 @@
 import type { Tables } from "@/integrations/supabase/types";
 
 export const OVERALL_CATEGORY_KEY = "overall";
+const TOP_TEAMS_PER_CATEGORY = 5;
 
 export type ResultsCategoryKey = typeof OVERALL_CATEGORY_KEY | `criterion-${number}`;
 
@@ -100,7 +101,7 @@ export function buildResultsCategories(
         if (scoreDiff !== 0) return scoreDiff;
         return a.teamName.localeCompare(b.teamName);
       })
-      .slice(0, 3);
+      .slice(0, TOP_TEAMS_PER_CATEGORY);
 
     return { ...category, winners };
   });
