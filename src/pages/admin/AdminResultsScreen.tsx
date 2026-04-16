@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Award, CheckCircle2, Download, Loader2, Move, Trophy } from "lucide-react";
+import { Award, CheckCircle2, Download, Loader2, Save, Trophy, Users } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -28,13 +28,6 @@ import { buildPublicResultsUrl } from "@/lib/resultsLink";
 import { toast } from "sonner";
 
 const PODIUM_COLORS = ["#F59E0B", "#94A3B8", "#CD7F32"];
-const MANUAL_RANKING_SLOT_COUNT = 3;
-
-type DraggedTeamPayload = {
-  teamId: string;
-  sourceCategoryKey: ResultsCategoryKey;
-  sourceSlotIndex: number | null;
-};
 
 function statusMap(status: string | undefined): "setup" | "active" | "closed" {
   if (status === "setup") return "setup";
@@ -54,10 +47,10 @@ export default function AdminResultsScreen() {
   const [closingAllVoting, setClosingAllVoting] = useState(false);
   const [reopeningSession, setReopeningSession] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
+  const [savingWinners, setSavingWinners] = useState(false);
   const [selectedTeamByCategory, setSelectedTeamByCategory] = useState<Record<string, string>>({});
-  const [manualRankingByCategory, setManualRankingByCategory] = useState<Record<string, (string | null)[]>>({});
-  const [draggedTeam, setDraggedTeam] = useState<DraggedTeamPayload | null>(null);
-  const [dragOverSlotKey, setDragOverSlotKey] = useState<string | null>(null);
+  const [selectedWinnerByCategory, setSelectedWinnerByCategory] = useState<Record<string, string | null>>({});
+  const hasHydratedWinnersRef = useRef(false);
 
   const loadData = async (sessionId: string) => {
     const [sessionRes, teamsRes, participantsRes, votesRes] = await Promise.all([
@@ -129,6 +122,16 @@ export default function AdminResultsScreen() {
     () => new Map(participants.map((participant) => [participant.id, participant.name])),
     [participants],
   );
+  const membersByTeamId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    participants.forEach((p) => {
+      if (!p.team_id || p.is_observer) return;
+      const list = map.get(p.team_id) ?? [];
+      list.push(p.name);
+      map.set(p.team_id, list);
+    });
+    return map;
+  }, [participants]);
 
   const revealedCategoryKeys = session?.results_revealed_categories || [];
   const revealedCategoryKeySet = useMemo(() => new Set(revealedCategoryKeys), [revealedCategoryKeys]);
@@ -144,8 +147,8 @@ export default function AdminResultsScreen() {
   const showCloseVotingButton = session?.status === "active";
   const showReopenSessionButton = session?.status === "voting_closed" || session?.status === "results_revealed";
   const manualWinnersReady = useMemo(
-    () => categories.length > 0 && categories.every((category) => Boolean(manualRankingByCategory[category.key]?.[0])),
-    [categories, manualRankingByCategory],
+    () => categories.length > 0 && categories.every((category) => Boolean(selectedWinnerByCategory[category.key])),
+    [categories, selectedWinnerByCategory],
   );
   const publicResultsUrl = useMemo(() => {
     if (!id || typeof window === "undefined") return "";
@@ -155,91 +158,61 @@ export default function AdminResultsScreen() {
   useEffect(() => {
     if (categories.length === 0) return;
 
-    setManualRankingByCategory((prev) => {
+    setSelectedWinnerByCategory((prev) => {
       const validTeamIds = new Set(teams.map((team) => team.id));
-      const next: Record<string, (string | null)[]> = {};
+      const next: Record<string, string | null> = {};
 
       categories.forEach((category) => {
-        const previous = prev[category.key] || [];
-        const normalizedPrevious = Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, (_, index) => {
-          const teamId = previous[index];
-          return teamId && validTeamIds.has(teamId) ? teamId : null;
-        });
-        next[category.key] = normalizedPrevious;
+        const previous = prev[category.key];
+        next[category.key] = previous && validTeamIds.has(previous) ? previous : null;
       });
 
       return next;
     });
   }, [categories, teams]);
 
-  const teamResultById = useMemo(
-    () => new Map(teamResults.map((result) => [result.teamId, result])),
-    [teamResults],
-  );
-  const teamNameById = useMemo(
-    () => new Map(teams.map((team) => [team.id, team.name])),
-    [teams],
-  );
+  // Hydrate winner selection from DB once on initial load
+  useEffect(() => {
+    if (!session || hasHydratedWinnersRef.current) return;
+    hasHydratedWinnersRef.current = true;
+    const stored = session.category_winners as Record<string, string> | null;
+    if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+      setSelectedWinnerByCategory((prev) => ({ ...prev, ...stored }));
+    }
+  }, [session]);
+
   const winnerCategoryByTeamId = useMemo(() => {
     const map = new Map<string, string>();
     categories.forEach((category) => {
-      const winnerTeamId = manualRankingByCategory[category.key]?.[0];
+      const winnerTeamId = selectedWinnerByCategory[category.key];
       if (!winnerTeamId || map.has(winnerTeamId)) return;
       map.set(winnerTeamId, category.label);
     });
     return map;
-  }, [categories, manualRankingByCategory]);
+  }, [categories, selectedWinnerByCategory]);
 
-  const updateRankingSlot = (
-    categoryKey: ResultsCategoryKey,
-    slotIndex: number,
-    incomingTeamId: string,
-    sourceSlotIndex: number | null,
-    sourceCategoryKey: ResultsCategoryKey,
-  ) => {
-    setManualRankingByCategory((prev) => {
-      const next = { ...prev };
-      const target = [...(next[categoryKey] || Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, () => null))];
-      const destinationExisting = target[slotIndex];
-      const existingIndex = target.findIndex((teamId) => teamId === incomingTeamId);
-
-      if (existingIndex !== -1) {
-        target[existingIndex] = null;
-      }
-
-      if (sourceSlotIndex !== null) {
-        if (sourceCategoryKey === categoryKey) {
-          if (sourceSlotIndex !== slotIndex) {
-            target[sourceSlotIndex] = destinationExisting ?? null;
-          }
-        } else {
-          const source = [...(next[sourceCategoryKey] || Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, () => null))];
-          if (source[sourceSlotIndex] === incomingTeamId) {
-            source[sourceSlotIndex] = null;
-            next[sourceCategoryKey] = source;
-          }
-        }
-      }
-
-      target[slotIndex] = incomingTeamId;
-      next[categoryKey] = target;
-      return next;
+  const buildWinnersPayload = () => {
+    const payload: Record<string, string> = {};
+    Object.entries(selectedWinnerByCategory).forEach(([key, teamId]) => {
+      if (teamId) payload[key] = teamId;
     });
+    return payload;
   };
 
-  const clearRankingSlot = (categoryKey: ResultsCategoryKey, slotIndex: number) => {
-    setManualRankingByCategory((prev) => {
-      const current = [...(prev[categoryKey] || Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, () => null))];
-      current[slotIndex] = null;
-      return { ...prev, [categoryKey]: current };
-    });
-  };
-
-  const getSelectedTeamsForCategory = (categoryKey: ResultsCategoryKey): TeamResult[] => {
-    const pickedTeamIds = manualRankingByCategory[categoryKey] || [];
-    return pickedTeamIds
-      .map((teamId) => (teamId ? teamResultById.get(teamId) || null : null))
-      .filter((result): result is TeamResult => result !== null);
+  const saveWinners = async () => {
+    if (!id) return;
+    setSavingWinners(true);
+    const { error: saveError } = await supabase
+      .from("sessions")
+      .update({ category_winners: buildWinnersPayload() })
+      .eq("id", id);
+    setSavingWinners(false);
+    if (saveError) {
+      console.error("Failed to save winners:", saveError);
+      toast.error(saveError.message || "Failed to save winners");
+      return;
+    }
+    toast.success("Winners saved");
   };
 
   const closeEveryVoting = async () => {
@@ -352,11 +325,13 @@ export default function AdminResultsScreen() {
     if (!id || !session) return;
 
     setRevealingAll(true);
+    const winnersPayload = buildWinnersPayload();
     const { error: updateError } = await supabase
       .from("sessions")
       .update({
         status: "results_revealed",
         results_revealed_categories: allCategoryKeys,
+        category_winners: winnersPayload,
       })
       .eq("id", id);
 
@@ -374,6 +349,7 @@ export default function AdminResultsScreen() {
             ...prev,
             status: "results_revealed",
             results_revealed_categories: allCategoryKeys,
+            category_winners: winnersPayload,
           }
         : prev
     ));
@@ -423,7 +399,7 @@ export default function AdminResultsScreen() {
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Results Board</p>
             <h2 className="text-2xl font-heading font-semibold">Category Rankings</h2>
             <p className="text-sm text-muted-foreground">
-              Drag teams into rank slots and compare them across overall score and every voting criterion.
+              Select one winner per category, then reveal the results to everyone in the room.
             </p>
           </div>
         </div>
@@ -521,7 +497,7 @@ export default function AdminResultsScreen() {
           ) : null}
           {!manualWinnersReady ? (
             <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-              Select at least one winner (#1 slot) for every category before revealing all results.
+              Select one winner for every category before revealing all results.
             </div>
           ) : null}
         </Card>
@@ -537,216 +513,153 @@ export default function AdminResultsScreen() {
           </Card>
         ) : (
           <>
-            <Card className="p-4 md:p-5">
-              <Accordion type="single" collapsible defaultValue="manual-winner-assignment">
-                <AccordionItem value="manual-winner-assignment" className="border-none">
-                  <AccordionTrigger className="py-0 hover:no-underline">
-                    <div className="text-left">
-                      <h3 className="font-heading text-base font-semibold">Manual Winner Assignment</h3>
-                      <p className="text-xs text-muted-foreground">
-                        Drag teams into the 3 ranking slots for each category. Teams already selected as #1 in another
-                        category are marked.
-                      </p>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-4">
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            {/* Winner Selection */}
+            <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-card to-card p-5">
+              <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-amber-300/30 blur-3xl" />
+              <div className="absolute -left-4 -bottom-4 h-24 w-24 rounded-full bg-yellow-300/20 blur-2xl" />
+              <div className="relative mb-5 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600 shadow-sm">
+                    <Trophy className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading text-base font-semibold">Crown the Winners</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Click a team to select them as the winner for each category. Teams already crowned elsewhere are flagged.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  onClick={() => void saveWinners()}
+                  disabled={savingWinners || !manualWinnersReady}
+                  variant="outline"
+                  className="border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                >
+                  <Save className="h-4 w-4" />
+                  {savingWinners ? "Saving..." : "Save Winners"}
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {categories.map((category) => {
-                  const pickedTeamIds = manualRankingByCategory[category.key] || Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, () => null);
-                  const rankedCandidates = [...teamResults].sort((a, b) => {
+                  const selectedWinnerId = selectedWinnerByCategory[category.key] ?? null;
+                  const rankedTeams = [...teamResults].sort((a, b) => {
                     const scoreDiff = category.scoreFor(b) - category.scoreFor(a);
                     if (scoreDiff !== 0) return scoreDiff;
                     return a.teamName.localeCompare(b.teamName);
                   });
-                  const originalRankByTeamId = new Map(rankedCandidates.map((team, index) => [team.teamId, index + 1]));
-                  const pickedTeamIdSet = new Set(
-                    pickedTeamIds.filter((teamId): teamId is string => Boolean(teamId)),
-                  );
-                  const availableCandidates = rankedCandidates.filter((candidate) => !pickedTeamIdSet.has(candidate.teamId));
 
                   return (
-                    <div key={`manual-${category.key}`} className="rounded-xl border p-3 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-semibold">{category.label}</h4>
-                        <span className="text-xs text-muted-foreground">3 slots</span>
+                    <div
+                      key={`winner-${category.key}`}
+                      className={cn(
+                        "rounded-xl border-2 p-4 space-y-3 transition-colors",
+                        selectedWinnerId
+                          ? "border-amber-300 bg-white/80"
+                          : "border-border bg-card/60",
+                      )}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <Award className="h-4 w-4 text-primary" />
+                          <h4 className="font-semibold">{category.label}</h4>
+                        </div>
+                        {selectedWinnerId ? (
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                            <Trophy className="h-3 w-3" />
+                            Winner selected
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Pick a winner</span>
+                        )}
                       </div>
 
-                      <div className="space-y-2">
-                        {Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, (_, slotIndex) => {
-                          const teamId = pickedTeamIds[slotIndex];
-                          const teamName = teamId ? teamNameById.get(teamId) || "Unknown team" : null;
-                          const teamResult = teamId ? teamResultById.get(teamId) || null : null;
-                          const winnerCategory = teamId ? winnerCategoryByTeamId.get(teamId) : null;
-                          const winnerAssignedElsewhere = slotIndex === 0 && winnerCategory && winnerCategory !== category.label;
+                      <div className="space-y-1.5">
+                        {rankedTeams.map((team, rankIndex) => {
+                          const isSelected = selectedWinnerId === team.teamId;
+                          const winnerCategory = winnerCategoryByTeamId.get(team.teamId);
+                          const alreadyWonElsewhere = Boolean(winnerCategory && winnerCategory !== category.label);
 
                           return (
-                            <div
-                              key={`${category.key}-slot-${slotIndex}`}
-                              onDragOver={(event) => {
-                                event.preventDefault();
-                              }}
-                              onDrop={() => {
-                                if (!draggedTeam) return;
-                                updateRankingSlot(
-                                  category.key,
-                                  slotIndex,
-                                  draggedTeam.teamId,
-                                  draggedTeam.sourceSlotIndex,
-                                  draggedTeam.sourceCategoryKey,
-                                );
-                                setDraggedTeam(null);
-                                setDragOverSlotKey(null);
-                              }}
+                            <button
+                              key={`${category.key}-team-${team.teamId}`}
+                              type="button"
+                              onClick={() =>
+                                setSelectedWinnerByCategory((prev) => ({
+                                  ...prev,
+                                  [category.key]: isSelected ? null : team.teamId,
+                                }))
+                              }
                               className={cn(
-                                "rounded-lg border border-dashed p-2.5 min-h-12 flex items-center justify-between gap-2 transition-colors",
-                                teamId ? "border-border bg-card" : "border-muted-foreground/35 bg-muted/20",
-                                dragOverSlotKey === `${category.key}-${slotIndex}` && "border-primary bg-primary/5",
+                                "w-full rounded-lg border px-3 py-2.5 text-left transition-all",
+                                isSelected
+                                  ? "border-amber-400 bg-gradient-to-r from-amber-50 to-yellow-50 shadow-md ring-1 ring-amber-300"
+                                  : "border-border bg-background hover:border-primary/40 hover:bg-muted/30",
                               )}
-                              onDragEnter={() => setDragOverSlotKey(`${category.key}-${slotIndex}`)}
-                              onDragLeave={() => setDragOverSlotKey((current) => (
-                                current === `${category.key}-${slotIndex}` ? null : current
-                              ))}
                             >
-                              <div className="min-w-0 flex-1">
-                                {teamName ? (
-                                  <div
-                                    draggable
-                                    onDragStart={(event) => {
-                                      event.dataTransfer.effectAllowed = "move";
-                                      setDraggedTeam({
-                                        teamId: teamId!,
-                                        sourceCategoryKey: category.key,
-                                        sourceSlotIndex: slotIndex,
-                                      });
-                                    }}
-                                    onDragEnd={() => {
-                                      setDraggedTeam(null);
-                                      setDragOverSlotKey(null);
-                                    }}
-                                    className={cn(
-                                      "w-full rounded-md border bg-background px-2.5 py-2 cursor-grab active:cursor-grabbing",
-                                      draggedTeam?.teamId === teamId && "opacity-50",
-                                    )}
-                                  >
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="min-w-0 flex items-start gap-2.5">
-                                        <span
-                                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold text-foreground shrink-0 mt-0.5"
-                                          style={{ backgroundColor: `${PODIUM_COLORS[slotIndex] ?? "hsl(var(--primary))"}33` }}
-                                        >
-                                          #{slotIndex + 1}
-                                        </span>
-                                        <div className="min-w-0">
-                                          <p className="text-sm font-medium truncate">{teamName}</p>
-                                          <p className="text-xs text-muted-foreground">
-                                            Score: {formatScore(teamResult ? category.scoreFor(teamResult) : 0)}
-                                          </p>
-                                          <p className="text-[11px] text-muted-foreground">
-                                            Original rank by average: #{originalRankByTeamId.get(teamId!) ?? "-"}
-                                          </p>
-                                          {winnerAssignedElsewhere ? (
-                                            <p className="text-[11px] text-amber-700">
-                                              Already selected as winner in {winnerCategory}
-                                            </p>
-                                          ) : null}
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-2">
-                                        <span className="text-sm font-semibold tabular-nums">
-                                          {formatScore(teamResult ? category.scoreFor(teamResult) : 0)}
-                                        </span>
-                                        <span className="text-xs text-muted-foreground">
-                                          <Move className="w-4 h-4 text-muted-foreground shrink-0" />
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <div className="rounded-md bg-muted/20 px-2.5 py-2">
-                                    <p className="text-xs text-muted-foreground">#{slotIndex + 1}</p>
-                                    <p className="text-xs text-muted-foreground">Drop team here</p>
-                                  </div>
-                                )}
-                              </div>
-                              {teamId ? (
-                                <div className="flex items-center gap-1.5 shrink-0 self-start">
-                                  <button
-                                    type="button"
-                                    onClick={() => clearRankingSlot(category.key, slotIndex)}
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background text-xs"
-                                  >
-                                    x
-                                  </button>
-                                </div>
-                              ) : null}
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="space-y-2">
-                        <p className="text-xs text-muted-foreground">Candidates</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                          {availableCandidates.map((candidate) => {
-                            const winnerCategory = winnerCategoryByTeamId.get(candidate.teamId);
-                            const winnerAssignedElsewhere = winnerCategory && winnerCategory !== category.label;
-                            return (
-                              <div
-                                key={`${category.key}-candidate-${candidate.teamId}`}
-                                draggable
-                                onDragStart={(event) => {
-                                  event.dataTransfer.effectAllowed = "move";
-                                  setDraggedTeam({
-                                    teamId: candidate.teamId,
-                                    sourceCategoryKey: category.key,
-                                    sourceSlotIndex: null,
-                                  });
-                                }}
-                                onDragEnd={() => {
-                                  setDraggedTeam(null);
-                                  setDragOverSlotKey(null);
-                                }}
-                                className={cn(
-                                  "rounded-lg border bg-background px-3 py-2 cursor-grab active:cursor-grabbing",
-                                  draggedTeam?.teamId === candidate.teamId && "opacity-50",
-                                  winnerAssignedElsewhere && "border-amber-300 text-amber-800",
-                                )}
-                              >
-                                <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex min-w-0 items-center gap-2.5">
+                                  {isSelected ? (
+                                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 text-white shadow-sm">
+                                      <Trophy className="h-3.5 w-3.5" />
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
+                                      #{rankIndex + 1}
+                                    </span>
+                                  )}
                                   <div className="min-w-0">
-                                    <p className="text-sm font-medium truncate">{candidate.teamName}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      Score: {formatScore(category.scoreFor(candidate))}
+                                    <p
+                                      className={cn(
+                                        "truncate text-sm font-medium",
+                                        isSelected && "font-semibold text-amber-900",
+                                      )}
+                                    >
+                                      {team.teamName}
                                     </p>
-                                    <p className="text-[11px] text-muted-foreground">
-                                      Original rank by average: #{originalRankByTeamId.get(candidate.teamId)}
-                                    </p>
-                                    {winnerAssignedElsewhere ? (
-                                      <p className="text-[11px] text-amber-700">
-                                        Winner in {winnerCategory}
-                                      </p>
+                                    {alreadyWonElsewhere ? (
+                                      <span className="mt-0.5 inline-flex items-center gap-1 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[11px] text-violet-700">
+                                        Already won {winnerCategory}
+                                      </span>
+                                    ) : null}
+                                    {isSelected ? (
+                                      <div className="mt-1.5 flex flex-wrap gap-1">
+                                        {(membersByTeamId.get(team.teamId) ?? []).length > 0 ? (
+                                          <>
+                                            <span className="inline-flex items-center gap-0.5 text-[11px] text-amber-700">
+                                              <Users className="h-3 w-3" />
+                                            </span>
+                                            {(membersByTeamId.get(team.teamId) ?? []).map((name) => (
+                                              <span key={name} className="rounded border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+                                                {name}
+                                              </span>
+                                            ))}
+                                          </>
+                                        ) : (
+                                          <span className="text-[11px] text-amber-600 italic">No members registered</span>
+                                        )}
+                                      </div>
                                     ) : null}
                                   </div>
-                                  <Move className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                                 </div>
+                                <span
+                                  className={cn(
+                                    "shrink-0 tabular-nums text-sm font-semibold",
+                                    isSelected ? "text-amber-800" : "text-foreground",
+                                  )}
+                                >
+                                  {formatScore(category.scoreFor(team))}
+                                </span>
                               </div>
-                            );
-                          })}
-                          {availableCandidates.length === 0 ? (
-                            <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
-                              All teams are already placed in slots.
-                            </div>
-                          ) : null}
-                        </div>
+                            </button>
+                          );
+                        })}
                       </div>
                     </div>
                   );
                 })}
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-              </Accordion>
-            </Card>
+              </div>
+            </div>
 
             <Card className="p-4 md:p-5">
               <Accordion type="single" collapsible defaultValue="original-points">
