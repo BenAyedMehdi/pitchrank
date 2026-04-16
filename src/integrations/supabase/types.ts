@@ -58,6 +58,7 @@ export type Database = {
       }
       sessions: {
         Row: {
+          category_winners: Json
           criteria_labels: string[] | null
           created_at: string
           current_pitch_index: number
@@ -72,6 +73,7 @@ export type Database = {
           timer_started_at: string | null
         }
         Insert: {
+          category_winners?: Json
           criteria_labels?: string[] | null
           created_at?: string
           current_pitch_index?: number
@@ -86,6 +88,7 @@ export type Database = {
           timer_started_at?: string | null
         }
         Update: {
+          category_winners?: Json
           criteria_labels?: string[] | null
           created_at?: string
           current_pitch_index?: number

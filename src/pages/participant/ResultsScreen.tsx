@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Award, Loader2, Sparkles, Star, Trophy } from "lucide-react";
+import { Loader2, Sparkles, Star, Trophy, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,33 +19,16 @@ import type { Tables } from "@/integrations/supabase/types";
 import { buildParticipantVoteSummaries } from "@/lib/participantVotes";
 import {
   buildCriteriaDisplayLabels,
-  buildResultsCategories,
-  buildTeamResults,
   getAllCategoryKeys,
-  type ResultsCategoryKey,
 } from "@/lib/results";
 import { normalizeCriteriaLabels } from "@/lib/voting";
-
-const PODIUM_COLORS = ["#F59E0B", "#94A3B8", "#CD7F32"];
-const PODIUM_COLUMN_HEIGHTS: Record<number, string> = {
-  1: "h-24",
-  2: "h-16",
-  3: "h-12",
-};
-
-function getRevealedCategoryKeys(session: Tables<"sessions">, criteriaCount: number): ResultsCategoryKey[] {
-  if (session.status === "results_revealed" && (session.results_revealed_categories?.length ?? 0) === 0) {
-    return getAllCategoryKeys(criteriaCount);
-  }
-
-  return (session.results_revealed_categories || []) as ResultsCategoryKey[];
-}
 
 export default function ResultsScreen() {
   const navigate = useNavigate();
   const [participant] = useState(() => getParticipant());
   const [session, setSession] = useState<Tables<"sessions"> | null>(null);
   const [teams, setTeams] = useState<Tables<"teams">[]>([]);
+  const [participants, setParticipants] = useState<Tables<"participants">[]>([]);
   const [votes, setVotes] = useState<Tables<"votes">[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -75,22 +58,29 @@ export default function ResultsScreen() {
     setSession(nextSession);
     setError("");
 
-    const [teamsRes, votesRes] = await Promise.all([
+    const [teamsRes, participantsRes, votesRes] = await Promise.all([
       supabase.from("teams").select("*").eq("session_id", sessionId).order("pitch_order"),
+      supabase.from("participants").select("*").eq("session_id", sessionId),
       supabase.from("votes").select("*").eq("session_id", sessionId),
     ]);
 
     if (teamsRes.error) {
       console.error("Failed to load teams in participant results:", teamsRes.error);
-      setError("Failed to load full results data. Retrying with available data.");
+      setError("Failed to load full results data.");
       setTeams([]);
     } else {
       setTeams(teamsRes.data || []);
     }
 
+    if (participantsRes.error) {
+      console.error("Failed to load participants in participant results:", participantsRes.error);
+      setParticipants([]);
+    } else {
+      setParticipants(participantsRes.data || []);
+    }
+
     if (votesRes.error) {
       console.error("Failed to load votes in participant results:", votesRes.error);
-      setError("Failed to load full results data. Retrying with available data.");
       setVotes([]);
     } else {
       setVotes(votesRes.data || []);
@@ -123,18 +113,6 @@ export default function ResultsScreen() {
           });
         },
       )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "votes",
-          filter: `session_id=eq.${participant.sessionId}`,
-        },
-        () => {
-          void loadData(participant.sessionId);
-        },
-      )
       .subscribe();
 
     return () => {
@@ -147,34 +125,47 @@ export default function ResultsScreen() {
     () => buildCriteriaDisplayLabels(criteriaLabels, votes),
     [criteriaLabels, votes],
   );
-  const teamResults = useMemo(
-    () => buildTeamResults(teams, votes, criteriaDisplayLabels),
-    [criteriaDisplayLabels, teams, votes],
-  );
-  const categories = useMemo(
-    () => buildResultsCategories(teamResults, criteriaDisplayLabels),
-    [criteriaDisplayLabels, teamResults],
-  );
-
-  const revealedCategoryKeys = useMemo(
-    () => (session ? getRevealedCategoryKeys(session, criteriaDisplayLabels.length) : []),
-    [criteriaDisplayLabels.length, session],
-  );
-  const revealedCategoryKeySet = useMemo(() => new Set(revealedCategoryKeys), [revealedCategoryKeys]);
   const allCategoryKeys = useMemo(
     () => getAllCategoryKeys(criteriaDisplayLabels.length),
     [criteriaDisplayLabels.length],
   );
-  const allRevealed = useMemo(
-    () => allCategoryKeys.length > 0 && allCategoryKeys.every((key) => revealedCategoryKeySet.has(key)),
-    [allCategoryKeys, revealedCategoryKeySet],
-  );
 
-  const visibleCategories = useMemo(() => {
-    if (!allRevealed) return [];
-    return categories.filter((category) => revealedCategoryKeySet.has(category.key));
-  }, [allRevealed, categories, revealedCategoryKeySet]);
-  const waitingForReveal = !allRevealed;
+  const teamById = useMemo(() => new Map(teams.map((t) => [t.id, t])), [teams]);
+  const membersByTeamId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    participants.forEach((p) => {
+      if (!p.team_id || p.is_observer) return;
+      const list = map.get(p.team_id) ?? [];
+      list.push(p.name);
+      map.set(p.team_id, list);
+    });
+    return map;
+  }, [participants]);
+
+  const isRevealed = session?.status === "results_revealed";
+
+  const winnerCards = useMemo(() => {
+    if (!isRevealed || !session) return [];
+    const stored = session.category_winners as Record<string, string> | null;
+    if (!stored || typeof stored !== "object" || Array.isArray(stored)) return [];
+    return allCategoryKeys
+      .map((key) => {
+        const teamId = stored[key];
+        if (!teamId) return null;
+        const label = key === "overall"
+          ? "Overall"
+          : criteriaDisplayLabels[parseInt(key.replace("criterion-", ""), 10)] ?? key;
+        return {
+          key,
+          label,
+          teamId,
+          teamName: teamById.get(teamId)?.name ?? "Unknown team",
+          members: membersByTeamId.get(teamId) ?? [],
+        };
+      })
+      .filter((c): c is NonNullable<typeof c> => c !== null);
+  }, [isRevealed, session, allCategoryKeys, criteriaDisplayLabels, teamById, membersByTeamId]);
+
   const myVoteSummaries = useMemo(() => {
     if (!participant) return [];
     return buildParticipantVoteSummaries(votes, participant.id, teams, criteriaDisplayLabels);
@@ -182,21 +173,18 @@ export default function ResultsScreen() {
 
   useEffect(() => {
     if (!session) return;
-
-    if (session.status !== "results_revealed") {
+    if (!isRevealed) {
       hasShownRevealCountdownRef.current = false;
       setRevealCountdownSeconds(null);
       return;
     }
-
-    if (!allRevealed || hasShownRevealCountdownRef.current) return;
+    if (hasShownRevealCountdownRef.current) return;
     hasShownRevealCountdownRef.current = true;
     setRevealCountdownSeconds(5);
-  }, [allRevealed, session]);
+  }, [isRevealed, session]);
 
   useEffect(() => {
     if (revealCountdownSeconds === null) return;
-
     const timer = window.setTimeout(() => {
       if (revealCountdownSeconds <= 1) {
         setRevealCountdownSeconds(null);
@@ -204,7 +192,6 @@ export default function ResultsScreen() {
       }
       setRevealCountdownSeconds((previous) => (previous ? previous - 1 : null));
     }, 1000);
-
     return () => window.clearTimeout(timer);
   }, [revealCountdownSeconds]);
 
@@ -218,7 +205,7 @@ export default function ResultsScreen() {
     );
   }
 
-  if (waitingForReveal) {
+  if (!isRevealed) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center px-6">
         <motion.div
@@ -294,7 +281,7 @@ export default function ResultsScreen() {
             <Trophy className="w-10 h-10 text-primary" />
           </div>
           <h1 className="font-heading text-2xl md:text-3xl font-bold">
-            Full rankings start in {revealCountdownSeconds}s
+            Winners starting in {revealCountdownSeconds}s
           </h1>
           <div className="flex items-center justify-center gap-2 text-muted-foreground">
             <Sparkles className="w-4 h-4" />
@@ -308,108 +295,73 @@ export default function ResultsScreen() {
 
   return (
     <div className="min-h-screen px-4 py-8">
-      <div className="max-w-[1200px] mx-auto space-y-6">
+      <div className="max-w-[900px] mx-auto space-y-6">
         {error ? (
           <Card className="p-3 border-amber-300 bg-amber-50">
             <p className="text-xs text-amber-900">{error}</p>
           </Card>
         ) : null}
-        <div className="relative overflow-hidden rounded-2xl border bg-gradient-to-br from-primary/10 via-card to-card p-5">
-          <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/20 blur-2xl" />
-          <div className="relative flex flex-col gap-2">
-            <p className="text-xs uppercase tracking-wide text-muted-foreground">Live Reveal</p>
-            <h1 className="text-2xl font-heading font-semibold">Results: {session.name}</h1>
-            <p className="text-sm text-muted-foreground">
-              Rankings are shown for each category without point totals.
-            </p>
+
+        <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-card to-card p-6">
+          <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-amber-300/30 blur-3xl" />
+          <div className="absolute -left-4 -bottom-4 h-24 w-24 rounded-full bg-yellow-300/20 blur-2xl" />
+          <div className="relative flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-100 text-amber-600 shadow-sm">
+              <Trophy className="h-6 w-6" />
+            </div>
+            <div>
+              <p className="text-xs uppercase tracking-wide text-muted-foreground">Final Results</p>
+              <h1 className="text-2xl font-heading font-bold">{session.name}</h1>
+            </div>
           </div>
         </div>
 
-        {visibleCategories.length === 0 ? (
+        {winnerCards.length === 0 ? (
           <Card className="p-8 text-center">
-            <p className="text-sm text-muted-foreground">No categories have been revealed yet.</p>
+            <p className="text-sm text-muted-foreground">Winners have not been determined yet.</p>
           </Card>
         ) : (
-          <>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {visibleCategories.map((category, categoryIndex) => {
-                const podiumWinners = category.winners.slice(0, 3);
-                const podiumByRank = new Map(
-                  podiumWinners.map((team, index) => [index + 1, team]),
-                );
-
-                return (
-                <motion.div
-                  key={category.key}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: categoryIndex * 0.06 }}
-                >
-                  <Card className="p-4 space-y-4 h-full">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Category</p>
-                        <h3 className="text-lg font-semibold">{category.label}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {winnerCards.map((card, index) => (
+              <motion.div
+                key={card.key}
+                initial={{ opacity: 0, y: 14 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.08 }}
+              >
+                <div className="rounded-2xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-5 shadow-md space-y-3 h-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-amber-600">{card.label}</span>
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-amber-400 text-white shadow-sm">
+                      <Trophy className="h-3.5 w-3.5" />
+                    </span>
+                  </div>
+                  <h2 className="text-xl font-heading font-bold text-amber-900">{card.teamName}</h2>
+                  {card.members.length > 0 ? (
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-xs text-amber-700">
+                        <Users className="h-3.5 w-3.5" />
+                        <span>Team members</span>
                       </div>
-                      <Award className="w-5 h-5 text-primary" />
+                      <div className="flex flex-wrap gap-1.5">
+                        {card.members.map((name) => (
+                          <span
+                            key={name}
+                            className="rounded-full border border-amber-200 bg-white px-2.5 py-0.5 text-xs font-medium text-amber-800"
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
                     </div>
-
-                    <div className="space-y-2">
-                      {podiumWinners.length > 0 ? (
-                        <div className="rounded-xl border bg-card p-3">
-                          <div className="grid grid-cols-3 gap-2 items-end">
-                            {[2, 1, 3].map((rank) => {
-                              const team = podiumByRank.get(rank);
-                              const color = PODIUM_COLORS[rank - 1] ?? "hsl(var(--primary))";
-                              const heightClass = PODIUM_COLUMN_HEIGHTS[rank] ?? "h-12";
-
-                              if (!team) {
-                                return (
-                                  <div key={`${category.key}-podium-empty-${rank}`} className="text-center">
-                                    <div className="h-8" />
-                                    <div className="rounded-t-md border border-dashed bg-muted/20 h-10" />
-                                  </div>
-                                );
-                              }
-
-                              return (
-                                <div key={team.teamId} className="text-center">
-                                  <p className="text-xs font-medium truncate mb-1">{team.teamName}</p>
-                                  <div
-                                    className={`rounded-t-md border ${heightClass} flex items-center justify-center text-xs font-semibold`}
-                                    style={{ backgroundColor: `${color}33`, borderColor: `${color}88` }}
-                                  >
-                                    #{rank}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {category.winners.map((winner, winnerIndex) => (
-                        <div key={winner.teamId} className="flex items-center justify-between rounded-xl border bg-card px-3 py-2.5">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span
-                              className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold text-foreground"
-                              style={{ backgroundColor: `${PODIUM_COLORS[winnerIndex] ?? "hsl(var(--primary))"}33` }}
-                            >
-                              #{winnerIndex + 1}
-                            </span>
-                            <span className="font-medium truncate">{winner.teamName}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-                </motion.div>
-                );
-              })}
-            </div>
-          </>
+                  ) : null}
+                </div>
+              </motion.div>
+            ))}
+          </div>
         )}
       </div>
+
       <div className="fixed bottom-4 left-0 right-0 z-40 flex justify-center pointer-events-none">
         <div className="pointer-events-auto">
           <Drawer open={myVotesOpen} onOpenChange={setMyVotesOpen}>

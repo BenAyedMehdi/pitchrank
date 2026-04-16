@@ -46,6 +46,8 @@ A real-time web app for live hackathon events. ~36 people in one room. 12 teams 
 | `timer_duration_seconds` | integer | Current pitch timer length (can be extended) |
 | `timer_paused_remaining_seconds` | integer nullable | Remaining seconds when timer is paused |
 | `timer_started_at` | timestamptz | Set when admin triggers timer |
+| `results_revealed_categories` | text[] | Category keys that have been revealed |
+| `category_winners` | jsonb | Map of category key → team UUID, e.g. `{"overall":"uuid","criterion-0":"uuid"}` |
 | `created_at` | timestamptz | |
 
 ### `teams`
@@ -130,7 +132,7 @@ All state changes update the `sessions` row. Supabase Realtime broadcasts to all
 
 - Per criterion: average of the `criteria_scores[i]` values for a team
 - Best Overall: sum of criterion averages
-- Winners: top 3 (🥇🥈🥉) shown per category
+- Winners: **one winner per category** selected manually by the admin; admin clicks to crown one team per category
 - Category labels come from `sessions.criteria_labels`
 
 ---
