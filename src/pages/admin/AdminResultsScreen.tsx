@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Award, CheckCircle2, Download, Loader2, Trophy } from "lucide-react";
+import { Award, CheckCircle2, Download, Loader2, Move, Trophy } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -18,6 +18,7 @@ import {
   formatScore,
   getAllCategoryKeys,
   sortTeamResultsByOverall,
+  type TeamResult,
   type ResultsCategoryKey,
 } from "@/lib/results";
 import { buildCategoryCsvExports } from "@/lib/resultsExport";
@@ -27,6 +28,13 @@ import { buildPublicResultsUrl } from "@/lib/resultsLink";
 import { toast } from "sonner";
 
 const PODIUM_COLORS = ["#F59E0B", "#94A3B8", "#CD7F32"];
+const MANUAL_RANKING_SLOT_COUNT = 3;
+
+type DraggedTeamPayload = {
+  teamId: string;
+  sourceCategoryKey: ResultsCategoryKey;
+  sourceSlotIndex: number | null;
+};
 
 function statusMap(status: string | undefined): "setup" | "active" | "closed" {
   if (status === "setup") return "setup";
@@ -42,12 +50,14 @@ export default function AdminResultsScreen() {
   const [votes, setVotes] = useState<Tables<"votes">[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [revealingCategory, setRevealingCategory] = useState<ResultsCategoryKey | null>(null);
   const [revealingAll, setRevealingAll] = useState(false);
   const [closingAllVoting, setClosingAllVoting] = useState(false);
   const [reopeningSession, setReopeningSession] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
   const [selectedTeamByCategory, setSelectedTeamByCategory] = useState<Record<string, string>>({});
+  const [manualRankingByCategory, setManualRankingByCategory] = useState<Record<string, (string | null)[]>>({});
+  const [draggedTeam, setDraggedTeam] = useState<DraggedTeamPayload | null>(null);
+  const [dragOverSlotKey, setDragOverSlotKey] = useState<string | null>(null);
 
   const loadData = async (sessionId: string) => {
     const [sessionRes, teamsRes, participantsRes, votesRes] = await Promise.all([
@@ -115,10 +125,6 @@ export default function AdminResultsScreen() {
     () => buildResultsCategories(teamResults, criteriaDisplayLabels),
     [criteriaDisplayLabels, teamResults],
   );
-  const criteriaCategories = useMemo(
-    () => categories.filter((category) => category.key !== "overall"),
-    [categories],
-  );
   const participantNameById = useMemo(
     () => new Map(participants.map((participant) => [participant.id, participant.name])),
     [participants],
@@ -137,10 +143,104 @@ export default function AdminResultsScreen() {
   const canRevealResults = session?.status === "voting_closed" || session?.status === "results_revealed";
   const showCloseVotingButton = session?.status === "active";
   const showReopenSessionButton = session?.status === "voting_closed" || session?.status === "results_revealed";
+  const manualWinnersReady = useMemo(
+    () => categories.length > 0 && categories.every((category) => Boolean(manualRankingByCategory[category.key]?.[0])),
+    [categories, manualRankingByCategory],
+  );
   const publicResultsUrl = useMemo(() => {
     if (!id || typeof window === "undefined") return "";
     return buildPublicResultsUrl(window.location.origin, id);
   }, [id]);
+
+  useEffect(() => {
+    if (categories.length === 0) return;
+
+    setManualRankingByCategory((prev) => {
+      const validTeamIds = new Set(teams.map((team) => team.id));
+      const next: Record<string, (string | null)[]> = {};
+
+      categories.forEach((category) => {
+        const previous = prev[category.key] || [];
+        const normalizedPrevious = Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, (_, index) => {
+          const teamId = previous[index];
+          return teamId && validTeamIds.has(teamId) ? teamId : null;
+        });
+        next[category.key] = normalizedPrevious;
+      });
+
+      return next;
+    });
+  }, [categories, teams]);
+
+  const teamResultById = useMemo(
+    () => new Map(teamResults.map((result) => [result.teamId, result])),
+    [teamResults],
+  );
+  const teamNameById = useMemo(
+    () => new Map(teams.map((team) => [team.id, team.name])),
+    [teams],
+  );
+  const winnerCategoryByTeamId = useMemo(() => {
+    const map = new Map<string, string>();
+    categories.forEach((category) => {
+      const winnerTeamId = manualRankingByCategory[category.key]?.[0];
+      if (!winnerTeamId || map.has(winnerTeamId)) return;
+      map.set(winnerTeamId, category.label);
+    });
+    return map;
+  }, [categories, manualRankingByCategory]);
+
+  const updateRankingSlot = (
+    categoryKey: ResultsCategoryKey,
+    slotIndex: number,
+    incomingTeamId: string,
+    sourceSlotIndex: number | null,
+    sourceCategoryKey: ResultsCategoryKey,
+  ) => {
+    setManualRankingByCategory((prev) => {
+      const next = { ...prev };
+      const target = [...(next[categoryKey] || Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, () => null))];
+      const destinationExisting = target[slotIndex];
+      const existingIndex = target.findIndex((teamId) => teamId === incomingTeamId);
+
+      if (existingIndex !== -1) {
+        target[existingIndex] = null;
+      }
+
+      if (sourceSlotIndex !== null) {
+        if (sourceCategoryKey === categoryKey) {
+          if (sourceSlotIndex !== slotIndex) {
+            target[sourceSlotIndex] = destinationExisting ?? null;
+          }
+        } else {
+          const source = [...(next[sourceCategoryKey] || Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, () => null))];
+          if (source[sourceSlotIndex] === incomingTeamId) {
+            source[sourceSlotIndex] = null;
+            next[sourceCategoryKey] = source;
+          }
+        }
+      }
+
+      target[slotIndex] = incomingTeamId;
+      next[categoryKey] = target;
+      return next;
+    });
+  };
+
+  const clearRankingSlot = (categoryKey: ResultsCategoryKey, slotIndex: number) => {
+    setManualRankingByCategory((prev) => {
+      const current = [...(prev[categoryKey] || Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, () => null))];
+      current[slotIndex] = null;
+      return { ...prev, [categoryKey]: current };
+    });
+  };
+
+  const getSelectedTeamsForCategory = (categoryKey: ResultsCategoryKey): TeamResult[] => {
+    const pickedTeamIds = manualRankingByCategory[categoryKey] || [];
+    return pickedTeamIds
+      .map((teamId) => (teamId ? teamResultById.get(teamId) || null : null))
+      .filter((result): result is TeamResult => result !== null);
+  };
 
   const closeEveryVoting = async () => {
     if (!id) return;
@@ -248,43 +348,6 @@ export default function AdminResultsScreen() {
     }
   };
 
-  const revealCategory = async (categoryKey: ResultsCategoryKey) => {
-    if (!id || !session) return;
-
-    const nextCategories = revealedCategoryKeySet.has(categoryKey)
-      ? [...revealedCategoryKeys, categoryKey]
-      : [...revealedCategoryKeys, categoryKey];
-    setRevealingCategory(categoryKey);
-
-    const { error: updateError } = await supabase
-      .from("sessions")
-      .update({
-        status: "results_revealed",
-        results_revealed_categories: nextCategories,
-      })
-      .eq("id", id);
-
-    setRevealingCategory(null);
-
-    if (updateError) {
-      console.error("Failed to reveal category:", updateError);
-      toast.error(updateError.message || "Failed to reveal category");
-      return;
-    }
-
-    setSession((prev) => (
-      prev
-        ? {
-            ...prev,
-            status: "results_revealed",
-            results_revealed_categories: nextCategories,
-          }
-        : prev
-    ));
-    void loadData(id);
-    toast.success(revealedCategoryKeySet.has(categoryKey) ? "Category revealed again" : "Category revealed to participants");
-  };
-
   const revealAllCategories = async () => {
     if (!id || !session) return;
 
@@ -333,6 +396,17 @@ export default function AdminResultsScreen() {
     );
   }
 
+  if (!session) {
+    return (
+      <AdminSessionLayout>
+        <Card className="p-6 text-center space-y-2">
+          <p className="text-sm font-medium">Unable to load session results.</p>
+          <p className="text-xs text-muted-foreground">Please go back to sessions and reopen this page.</p>
+        </Card>
+      </AdminSessionLayout>
+    );
+  }
+
   return (
     <AdminSessionLayout
       sessionName={session?.name}
@@ -347,9 +421,9 @@ export default function AdminResultsScreen() {
           <div className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-primary/20 blur-2xl" />
           <div className="relative flex flex-col gap-2">
             <p className="text-xs uppercase tracking-wide text-muted-foreground">Results Board</p>
-            <h2 className="text-2xl font-heading font-semibold">Top 3 Winners by Category</h2>
+            <h2 className="text-2xl font-heading font-semibold">Category Rankings</h2>
             <p className="text-sm text-muted-foreground">
-              Live ranking across overall score and every voting criterion.
+              Drag teams into rank slots and compare them across overall score and every voting criterion.
             </p>
           </div>
         </div>
@@ -404,7 +478,7 @@ export default function AdminResultsScreen() {
             <div>
               <h3 className="font-heading text-base font-semibold">Reveal Results</h3>
               <p className="text-xs text-muted-foreground">
-                First close all voting, then reveal categories one by one or all at once.
+                First close all voting, then reveal all category rankings at once.
               </p>
             </div>
             <div className="flex items-center gap-2 flex-wrap justify-end">
@@ -434,9 +508,9 @@ export default function AdminResultsScreen() {
               ) : null}
               <Button
                 onClick={() => void revealAllCategories()}
-                disabled={revealingAll || !canRevealResults}
+                disabled={revealingAll || !canRevealResults || !manualWinnersReady}
               >
-                {revealingAll ? "Revealing..." : "Reveal all categories"}
+                {revealingAll ? "Revealing..." : "Reveal All Results"}
               </Button>
             </div>
           </div>
@@ -445,49 +519,11 @@ export default function AdminResultsScreen() {
               Close every voting first to enable reveal actions.
             </div>
           ) : null}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-            {criteriaCategories.map((category) => {
-              const isRevealed = revealedCategoryKeySet.has(category.key);
-              const isRevealing = revealingCategory === category.key;
-
-              return (
-                <div
-                  key={category.key}
-                  className={cn(
-                    "rounded-xl border p-3 flex items-center justify-between gap-3 transition-colors",
-                    isRevealed
-                      ? "bg-green-50 border-green-300"
-                      : "bg-card border-border",
-                  )}
-                >
-                  <div className="min-w-0">
-                    <p className={cn("text-sm font-medium truncate", isRevealed && "text-green-800")}>
-                      {category.label}
-                    </p>
-                    <p className={cn("text-[11px] text-muted-foreground", isRevealed && "text-green-700")}>
-                      {isRevealed ? "Revealed to participants" : "Hidden from participants"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {isRevealed ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-green-300 bg-green-100 px-2.5 py-1 text-xs font-medium text-green-800">
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        Revealed
-                      </span>
-                    ) : null}
-                    <Button
-                      size="sm"
-                      variant={isRevealed ? "secondary" : "default"}
-                      disabled={isRevealing || !canRevealResults}
-                      onClick={() => void revealCategory(category.key)}
-                    >
-                      {isRevealing ? "..." : isRevealed ? "Reveal again" : "Reveal"}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          {!manualWinnersReady ? (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              Select at least one winner (#1 slot) for every category before revealing all results.
+            </div>
+          ) : null}
         </Card>
 
         {teams.length === 0 ? (
@@ -501,16 +537,240 @@ export default function AdminResultsScreen() {
           </Card>
         ) : (
           <>
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-              {categories.map((category, categoryIndex) => {
-                const chartData = category.winners.map((winner, winnerIndex) => ({
+            <Card className="p-4 md:p-5">
+              <Accordion type="single" collapsible defaultValue="manual-winner-assignment">
+                <AccordionItem value="manual-winner-assignment" className="border-none">
+                  <AccordionTrigger className="py-0 hover:no-underline">
+                    <div className="text-left">
+                      <h3 className="font-heading text-base font-semibold">Manual Winner Assignment</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Drag teams into the 3 ranking slots for each category. Teams already selected as #1 in another
+                        category are marked.
+                      </p>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                {categories.map((category) => {
+                  const pickedTeamIds = manualRankingByCategory[category.key] || Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, () => null);
+                  const rankedCandidates = [...teamResults].sort((a, b) => {
+                    const scoreDiff = category.scoreFor(b) - category.scoreFor(a);
+                    if (scoreDiff !== 0) return scoreDiff;
+                    return a.teamName.localeCompare(b.teamName);
+                  });
+                  const originalRankByTeamId = new Map(rankedCandidates.map((team, index) => [team.teamId, index + 1]));
+                  const pickedTeamIdSet = new Set(
+                    pickedTeamIds.filter((teamId): teamId is string => Boolean(teamId)),
+                  );
+                  const availableCandidates = rankedCandidates.filter((candidate) => !pickedTeamIdSet.has(candidate.teamId));
+
+                  return (
+                    <div key={`manual-${category.key}`} className="rounded-xl border p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-semibold">{category.label}</h4>
+                        <span className="text-xs text-muted-foreground">3 slots</span>
+                      </div>
+
+                      <div className="space-y-2">
+                        {Array.from({ length: MANUAL_RANKING_SLOT_COUNT }, (_, slotIndex) => {
+                          const teamId = pickedTeamIds[slotIndex];
+                          const teamName = teamId ? teamNameById.get(teamId) || "Unknown team" : null;
+                          const teamResult = teamId ? teamResultById.get(teamId) || null : null;
+                          const winnerCategory = teamId ? winnerCategoryByTeamId.get(teamId) : null;
+                          const winnerAssignedElsewhere = slotIndex === 0 && winnerCategory && winnerCategory !== category.label;
+
+                          return (
+                            <div
+                              key={`${category.key}-slot-${slotIndex}`}
+                              onDragOver={(event) => {
+                                event.preventDefault();
+                              }}
+                              onDrop={() => {
+                                if (!draggedTeam) return;
+                                updateRankingSlot(
+                                  category.key,
+                                  slotIndex,
+                                  draggedTeam.teamId,
+                                  draggedTeam.sourceSlotIndex,
+                                  draggedTeam.sourceCategoryKey,
+                                );
+                                setDraggedTeam(null);
+                                setDragOverSlotKey(null);
+                              }}
+                              className={cn(
+                                "rounded-lg border border-dashed p-2.5 min-h-12 flex items-center justify-between gap-2 transition-colors",
+                                teamId ? "border-border bg-card" : "border-muted-foreground/35 bg-muted/20",
+                                dragOverSlotKey === `${category.key}-${slotIndex}` && "border-primary bg-primary/5",
+                              )}
+                              onDragEnter={() => setDragOverSlotKey(`${category.key}-${slotIndex}`)}
+                              onDragLeave={() => setDragOverSlotKey((current) => (
+                                current === `${category.key}-${slotIndex}` ? null : current
+                              ))}
+                            >
+                              <div className="min-w-0 flex-1">
+                                {teamName ? (
+                                  <div
+                                    draggable
+                                    onDragStart={(event) => {
+                                      event.dataTransfer.effectAllowed = "move";
+                                      setDraggedTeam({
+                                        teamId: teamId!,
+                                        sourceCategoryKey: category.key,
+                                        sourceSlotIndex: slotIndex,
+                                      });
+                                    }}
+                                    onDragEnd={() => {
+                                      setDraggedTeam(null);
+                                      setDragOverSlotKey(null);
+                                    }}
+                                    className={cn(
+                                      "w-full rounded-md border bg-background px-2.5 py-2 cursor-grab active:cursor-grabbing",
+                                      draggedTeam?.teamId === teamId && "opacity-50",
+                                    )}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0 flex items-start gap-2.5">
+                                        <span
+                                          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold text-foreground shrink-0 mt-0.5"
+                                          style={{ backgroundColor: `${PODIUM_COLORS[slotIndex] ?? "hsl(var(--primary))"}33` }}
+                                        >
+                                          #{slotIndex + 1}
+                                        </span>
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-medium truncate">{teamName}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            Score: {formatScore(teamResult ? category.scoreFor(teamResult) : 0)}
+                                          </p>
+                                          <p className="text-[11px] text-muted-foreground">
+                                            Original rank by average: #{originalRankByTeamId.get(teamId!) ?? "-"}
+                                          </p>
+                                          {winnerAssignedElsewhere ? (
+                                            <p className="text-[11px] text-amber-700">
+                                              Already selected as winner in {winnerCategory}
+                                            </p>
+                                          ) : null}
+                                        </div>
+                                      </div>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-semibold tabular-nums">
+                                          {formatScore(teamResult ? category.scoreFor(teamResult) : 0)}
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                          <Move className="w-4 h-4 text-muted-foreground shrink-0" />
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="rounded-md bg-muted/20 px-2.5 py-2">
+                                    <p className="text-xs text-muted-foreground">#{slotIndex + 1}</p>
+                                    <p className="text-xs text-muted-foreground">Drop team here</p>
+                                  </div>
+                                )}
+                              </div>
+                              {teamId ? (
+                                <div className="flex items-center gap-1.5 shrink-0 self-start">
+                                  <button
+                                    type="button"
+                                    onClick={() => clearRankingSlot(category.key, slotIndex)}
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md border bg-background text-xs"
+                                  >
+                                    x
+                                  </button>
+                                </div>
+                              ) : null}
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="space-y-2">
+                        <p className="text-xs text-muted-foreground">Candidates</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {availableCandidates.map((candidate) => {
+                            const winnerCategory = winnerCategoryByTeamId.get(candidate.teamId);
+                            const winnerAssignedElsewhere = winnerCategory && winnerCategory !== category.label;
+                            return (
+                              <div
+                                key={`${category.key}-candidate-${candidate.teamId}`}
+                                draggable
+                                onDragStart={(event) => {
+                                  event.dataTransfer.effectAllowed = "move";
+                                  setDraggedTeam({
+                                    teamId: candidate.teamId,
+                                    sourceCategoryKey: category.key,
+                                    sourceSlotIndex: null,
+                                  });
+                                }}
+                                onDragEnd={() => {
+                                  setDraggedTeam(null);
+                                  setDragOverSlotKey(null);
+                                }}
+                                className={cn(
+                                  "rounded-lg border bg-background px-3 py-2 cursor-grab active:cursor-grabbing",
+                                  draggedTeam?.teamId === candidate.teamId && "opacity-50",
+                                  winnerAssignedElsewhere && "border-amber-300 text-amber-800",
+                                )}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium truncate">{candidate.teamName}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      Score: {formatScore(category.scoreFor(candidate))}
+                                    </p>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      Original rank by average: #{originalRankByTeamId.get(candidate.teamId)}
+                                    </p>
+                                    {winnerAssignedElsewhere ? (
+                                      <p className="text-[11px] text-amber-700">
+                                        Winner in {winnerCategory}
+                                      </p>
+                                    ) : null}
+                                  </div>
+                                  <Move className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                                </div>
+                              </div>
+                            );
+                          })}
+                          {availableCandidates.length === 0 ? (
+                            <div className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground sm:col-span-2">
+                              All teams are already placed in slots.
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </Card>
+
+            <Card className="p-4 md:p-5">
+              <Accordion type="single" collapsible defaultValue="original-points">
+                <AccordionItem value="original-points" className="border-none">
+                  <AccordionTrigger className="py-0 hover:no-underline">
+                    <div className="text-left">
+                      <h3 className="font-heading text-base font-semibold">Original Points</h3>
+                      <p className="text-xs text-muted-foreground">
+                        Top 5 teams per category based on average points only (no manual picking).
+                      </p>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-4">
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                      {categories.map((category, categoryIndex) => {
+                const originalTopTeams = category.winners;
+                const chartData = originalTopTeams.map((winner, winnerIndex) => ({
                   rank: winnerIndex + 1,
                   team: winner.teamName,
                   score: Number(category.scoreFor(winner).toFixed(2)),
                 }));
                 const selectedTeamId =
                   selectedTeamByCategory[category.key] ??
-                  category.winners[0]?.teamId ??
+                  originalTopTeams[0]?.teamId ??
                   teams[0]?.id ??
                   "";
                 const selectedTeamName =
@@ -520,7 +780,11 @@ export default function AdminResultsScreen() {
                   .filter((vote) => vote.team_id === selectedTeamId)
                   .map((vote) => {
                     const categoryScore = category.key === "overall"
-                      ? vote.criteria_scores.reduce((sum, score) => sum + score, 0)
+                      ? (
+                        vote.criteria_scores.length === 0
+                          ? 0
+                          : vote.criteria_scores.reduce((sum, score) => sum + score, 0) / vote.criteria_scores.length
+                      )
                       : vote.criteria_scores[Number(category.key.replace("criterion-", ""))] ?? 0;
                     return {
                       voteId: vote.id,
@@ -547,7 +811,7 @@ export default function AdminResultsScreen() {
                       </div>
 
                       <div className="space-y-2">
-                        {category.winners.map((winner, winnerIndex) => (
+                        {originalTopTeams.map((winner, winnerIndex) => (
                           <div key={winner.teamId} className="flex items-center justify-between rounded-xl border bg-card px-3 py-2.5">
                             <div className="flex items-center gap-2.5 min-w-0">
                               <span
@@ -563,6 +827,11 @@ export default function AdminResultsScreen() {
                             </span>
                           </div>
                         ))}
+                        {originalTopTeams.length === 0 ? (
+                          <div className="rounded-xl border border-dashed px-3 py-4 text-sm text-muted-foreground text-center">
+                            No ranked teams available yet.
+                          </div>
+                        ) : null}
                       </div>
 
                       <ChartContainer
@@ -632,7 +901,7 @@ export default function AdminResultsScreen() {
                                   {selectedTeamVotes.map((row) => (
                                     <div key={row.voteId} className="flex items-center justify-between text-sm">
                                       <span>{row.voterName}</span>
-                                      <span className="font-semibold tabular-nums">{row.categoryScore}</span>
+                                      <span className="font-semibold tabular-nums">{formatScore(row.categoryScore)}</span>
                                     </div>
                                   ))}
                                 </div>
@@ -644,8 +913,12 @@ export default function AdminResultsScreen() {
                     </Card>
                   </motion.div>
                 );
-              })}
-            </div>
+                      })}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              </Accordion>
+            </Card>
 
             <Card className="p-0 overflow-hidden">
               <div className="px-4 py-3 border-b bg-muted/30">

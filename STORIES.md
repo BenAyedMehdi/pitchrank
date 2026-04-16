@@ -52,7 +52,7 @@
 | E6 | Participant sees a between-pitches waiting screen after voting | 🔴 | [X] |
 | E7 | Participant can add optional short comment per team | 🟡 | [ ] |
 | E8 | Participant can edit vote before timer ends or admin advances | 🟡 | [X] |
-| D4 | Participant can rejoin and be restored to correct screen if tab is closed | 🟡 | [ ] |
+| D4 | Participant can rejoin and be restored to correct screen if tab is closed | 🟡 | [X] |
 
 ---
 
@@ -92,7 +92,7 @@
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G6 | When a pitch starts the countdown timer does **not** start automatically — it only starts when the admin explicitly triggers it (after the team has finished pitching), giving voters 1 minute to finalise their scores | 🔴 | [ ] |
+| G6 | When a pitch starts the countdown timer does **not** start automatically — it only starts when the admin explicitly triggers it (after the team has finished pitching), giving voters 1 minute to finalise their scores | 🔴 | [x] |
 | G7 | The status indicator next to a team name in the pitch tab shows a **yellow "in-progress" icon** while at least one voter has not yet submitted a vote, and switches to a **green tick** only once **all** voters have submitted their vote | 🔴 | [ ] |
 | G8 | Each team is assigned a distinct random colour from a predefined palette of clear, readable colours; these colours are consistently used in the pitch tab and the results page to visually differentiate teams | 🟡 | [ ] |
 
@@ -100,22 +100,22 @@
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G9 | When a voter tries to join with a name that already exists in the session, they are shown an error message and asked to enter a different name before proceeding | 🔴 | [ ] |
+| G9 | When a voter tries to join with a name that already exists in the session, they are shown an error message and asked to enter a different name before proceeding | 🔴 | [x] |
 
 ### Voter — Voting view
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G10 | After submitting a vote, a voter can edit their scores for that pitch as long as the admin has not yet closed voting for that team (i.e. the voting session for that pitch is still open) | 🔴 | [ ] |
+| G10 | After submitting a vote, a voter can edit their scores for that pitch as long as the admin has not yet closed voting for that team (i.e. the voting session for that pitch is still open) | 🔴 | [x] |
 
 ### Admin — Results page
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G11 | All scores displayed are **averages** (0–5 scale, e.g. 4.32) so that differences in voter turnout do not unfairly influence rankings | 🔴 | [ ] |
-| G12 | Results page shows the **top 5 teams** for each category, ranked by their average score | 🔴 | [ ] |
-| G13 | Admin can **manually select a winner** for each category from the ranked list (to handle the rule that a team cannot win more than one category); the UI clearly shows which teams are already assigned a win in another category | 🔴 | [ ] |
-| G14 | The option to reveal individual category results separately is **removed**; instead, once the admin has selected winners for all categories, a single "Reveal All Results" button broadcasts the complete results to all participants simultaneously | 🔴 | [ ] |
+| G11 | All scores displayed are **averages** (0–5 scale, e.g. 4.32) so that differences in voter turnout do not unfairly influence rankings | 🔴 | [x] |
+| G12 | Results page shows the **top 5 teams** for each category, ranked by their average score | 🔴 | [x] |
+| G13 | Admin can **manually select a winner** for each category from the ranked list (to handle the rule that a team cannot win more than one category); the UI clearly shows which teams are already assigned a win in another category | 🔴 | [x] |
+| G14 | The option to reveal individual category results separately is **removed**; instead, once the admin has selected winners for all categories, a single "Reveal All Results" button broadcasts the complete results to all participants simultaneously | 🔴 | [x] |
 | G15 | The admin results page has an improved layout optimised for laptop use: clear hierarchy, readable tables, winner cards, and good use of horizontal space | 🟡 | [ ] |
 | G16 | Team colours (defined in G8) are used consistently on the results page to visually link scores and winner cards back to the correct team | 🟡 | [ ] |
 
