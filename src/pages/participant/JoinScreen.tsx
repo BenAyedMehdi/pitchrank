@@ -6,6 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { JoinCodeDisplay } from "@/components/JoinCodeDisplay";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  isDuplicateParticipantName,
+  normalizeParticipantName,
+  sanitizeParticipantName,
+} from "@/lib/participantName";
 import { setParticipant } from "@/lib/participantStore";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
@@ -19,6 +24,7 @@ export default function JoinScreen() {
   const [teams, setTeams] = useState<Tables<"teams">[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [nameError, setNameError] = useState("");
 
   useEffect(() => {
     if (!code) return;
@@ -51,7 +57,32 @@ export default function JoinScreen() {
 
   const handleEnter = async () => {
     if (!name.trim() || !teamId || !session) return;
+    const sanitizedName = sanitizeParticipantName(name);
+    const normalizedName = normalizeParticipantName(sanitizedName);
+    if (!normalizedName) return;
+    setNameError("");
+
     setSubmitting(true);
+
+    const { data: existingParticipants, error: existingParticipantsError } = await supabase
+      .from("participants")
+      .select("name")
+      .eq("session_id", session.id);
+
+    if (existingParticipantsError) {
+      console.error("Failed to validate participant name uniqueness:", existingParticipantsError);
+      toast.error("Failed to validate participant name");
+      setSubmitting(false);
+      return;
+    }
+
+    if (isDuplicateParticipantName((existingParticipants || []).map((participant) => participant.name), sanitizedName)) {
+      const duplicateNameError = "This name is already taken in this session. Please enter a different name.";
+      setNameError(duplicateNameError);
+      toast.error(duplicateNameError);
+      setSubmitting(false);
+      return;
+    }
 
     const isObserver = teamId === "observer";
 
@@ -59,7 +90,7 @@ export default function JoinScreen() {
       .from("participants")
       .insert({
         session_id: session.id,
-        name: name.trim(),
+        name: sanitizedName,
         team_id: isObserver ? null : teamId,
         is_observer: isObserver,
       })
@@ -115,10 +146,16 @@ export default function JoinScreen() {
             <label className="text-sm font-medium">Your name</label>
             <Input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value);
+                if (nameError) setNameError("");
+              }}
               placeholder="Enter your name"
               className="h-12 bg-card"
             />
+            {nameError ? (
+              <p className="text-xs text-destructive">{nameError}</p>
+            ) : null}
           </div>
 
           <div className="space-y-2">

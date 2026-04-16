@@ -100,7 +100,7 @@
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G9 | When a voter tries to join with a name that already exists in the session, they are shown an error message and asked to enter a different name before proceeding | 🔴 | [ ] |
+| G9 | When a voter tries to join with a name that already exists in the session, they are shown an error message and asked to enter a different name before proceeding | 🔴 | [x] |
 
 ### Voter — Voting view
 
