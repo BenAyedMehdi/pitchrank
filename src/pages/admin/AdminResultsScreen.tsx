@@ -109,9 +109,13 @@ export default function AdminResultsScreen() {
     () => buildCriteriaDisplayLabels(criteriaLabels, votes),
     [criteriaLabels, votes],
   );
+  const excludedParticipantIds = useMemo(
+    () => new Set(participants.filter((p) => p.is_excluded).map((p) => p.id)),
+    [participants],
+  );
   const teamResults = useMemo(
-    () => buildTeamResults(teams, votes, criteriaDisplayLabels),
-    [criteriaDisplayLabels, teams, votes],
+    () => buildTeamResults(teams, votes, criteriaDisplayLabels, excludedParticipantIds),
+    [criteriaDisplayLabels, excludedParticipantIds, teams, votes],
   );
   const sortedResults = useMemo(() => sortTeamResultsByOverall(teamResults), [teamResults]);
   const categories = useMemo(

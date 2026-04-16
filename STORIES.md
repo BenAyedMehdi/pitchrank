@@ -126,7 +126,7 @@
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
 | G17 | CSV export is restructured so that columns are grouped by team then by category, rows are individual voters, and the last row contains the per-column average. Format example:<br><br>`(blank),(blank),Team 1,,,,Team 2,,,`<br>`(blank),Cat1,Cat2,Cat3,Overall,Cat1,Cat2,Cat3,Overall`<br>`Voter1,x,x,x,x,x,x,x,x`<br>`Voter2,x,x,x,x,x,x,x,x`<br>`Avg,AvgT1C1,AvgT1C2,AvgT1C3,AvgT1,AvgT2C1,AvgT2C2,AvgT2C3,AvgT2` | 🟡 | [ ] |
-| G18 | Admin can manually mark a voter as **excluded** from the session. An excluded voter's scores are omitted from **all** team averages (not just the teams they missed), preserving fairness — it is unfair to count a voter's score for Team A but not Team B. If the admin does not mark a voter as excluded, their submitted votes continue to count normally in the averages. The exclusion can be toggled at any point before results are revealed. | 🔴 | [ ] |
+| G18 | Admin can manually mark a voter as **excluded** from the session. An excluded voter's scores are omitted from **all** team averages (not just the teams they missed), preserving fairness — it is unfair to count a voter's score for Team A but not Team B. If the admin does not mark a voter as excluded, their submitted votes continue to count normally in the averages. The exclusion can be toggled at any point before results are revealed. | 🔴 | [x] |
 
 ---
 
@@ -162,6 +162,7 @@
 - **G6** — Timer no longer starts automatically when a pitch begins. `handleStartPitch` only calls the `start_pitch` RPC (opens voting for participants); a new explicit "Start Timer" step in the pitch-flow card triggers the 1-minute countdown. `isVotingOpen` updated to return `true` when pitch is active but no timer has started yet, so participants can begin filling in scores immediately
 - **G7** — Team pill badges in the Pitch tab now use a yellow clock icon while ≥1 eligible voter has not yet submitted, and switch to a green checkmark only when every eligible voter has voted for that team
 - **G18** — Story added: admin can manually exclude a voter so their scores are omitted from all team averages
+- **G18** — Implemented: `is_excluded` column added to `participants` table (migration `20260416230000`); admin can toggle exclusion per-voter via `UserX`/`UserCheck` icons in the Pitch tab voter list; excluded voters are dimmed and shown with an "Excluded" badge; `buildTeamResults` now accepts an optional `excludedParticipantIds` set to filter votes; `AdminResultsScreen` derives this set from participants before computing team results; `teamVoteStatus` and `eligibleVoters` counts respect exclusion so the green-tick/yellow-clock badges on team pills update correctly when a missing voter is excluded
 - Added `public/_redirects` so that Netlify/preview deployments serve `index.html` for all client-side routes (e.g. `/admin`, `/admin/sessions`) instead of returning 404
 
 ### Earlier phases
