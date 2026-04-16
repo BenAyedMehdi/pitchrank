@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getParticipantRoute, isVotingOpen } from "./sessionRouting";
 
 describe("getParticipantRoute", () => {
-  it("returns vote when session is active, a pitch is selected, and timer is running", () => {
+  it("returns vote when session is active and a pitch is selected", () => {
     const startedAt = new Date(1_000).toISOString();
     const route = getParticipantRoute({
       status: "active",
@@ -25,7 +25,7 @@ describe("getParticipantRoute", () => {
     expect(route).toBe("/lobby");
   });
 
-  it("returns lobby when timer is missing or expired", () => {
+  it("keeps vote route when timer is missing or expired as long as pitch is active", () => {
     const startedAt = new Date(1_000).toISOString();
     expect(getParticipantRoute({
       status: "active",
@@ -33,14 +33,14 @@ describe("getParticipantRoute", () => {
       timer_started_at: null,
       timer_duration_seconds: 60,
       timer_paused_remaining_seconds: null,
-    }, 10_000)).toBe("/lobby");
+    }, 10_000)).toBe("/vote");
     expect(getParticipantRoute({
       status: "active",
       current_pitch_index: 1,
       timer_started_at: startedAt,
       timer_duration_seconds: 60,
       timer_paused_remaining_seconds: null,
-    }, 70_000)).toBe("/lobby");
+    }, 70_000)).toBe("/vote");
   });
 
   it("returns lobby for setup and results route for closed states", () => {
@@ -79,7 +79,7 @@ describe("getParticipantRoute", () => {
 });
 
 describe("isVotingOpen", () => {
-  it("returns false when timer is expired", () => {
+  it("returns true when pitch is active, regardless of timer state", () => {
     const startedAt = new Date(1_000).toISOString();
     expect(isVotingOpen({
       status: "active",
@@ -87,6 +87,6 @@ describe("isVotingOpen", () => {
       timer_started_at: startedAt,
       timer_duration_seconds: 60,
       timer_paused_remaining_seconds: null,
-    }, 70_000)).toBe(false);
+    }, 70_000)).toBe(true);
   });
 });

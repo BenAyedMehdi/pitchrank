@@ -396,6 +396,17 @@ export default function AdminResultsScreen() {
     );
   }
 
+  if (!session) {
+    return (
+      <AdminSessionLayout>
+        <Card className="p-6 text-center space-y-2">
+          <p className="text-sm font-medium">Unable to load session results.</p>
+          <p className="text-xs text-muted-foreground">Please go back to sessions and reopen this page.</p>
+        </Card>
+      </AdminSessionLayout>
+    );
+  }
+
   return (
     <AdminSessionLayout
       sessionName={session?.name}

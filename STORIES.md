@@ -92,7 +92,7 @@
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G6 | When a pitch starts the countdown timer does **not** start automatically — it only starts when the admin explicitly triggers it (after the team has finished pitching), giving voters 1 minute to finalise their scores | 🔴 | [ ] |
+| G6 | When a pitch starts the countdown timer does **not** start automatically — it only starts when the admin explicitly triggers it (after the team has finished pitching), giving voters 1 minute to finalise their scores | 🔴 | [x] |
 | G7 | The status indicator next to a team name in the pitch tab shows a **yellow "in-progress" icon** while at least one voter has not yet submitted a vote, and switches to a **green tick** only once **all** voters have submitted their vote | 🔴 | [ ] |
 | G8 | Each team is assigned a distinct random colour from a predefined palette of clear, readable colours; these colours are consistently used in the pitch tab and the results page to visually differentiate teams | 🟡 | [ ] |
 
