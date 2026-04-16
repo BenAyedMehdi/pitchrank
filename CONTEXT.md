@@ -130,7 +130,7 @@ All state changes update the `sessions` row. Supabase Realtime broadcasts to all
 
 - Per criterion: average of the `criteria_scores[i]` values for a team
 - Best Overall: sum of criterion averages
-- Winners: top 3 (🥇🥈🥉) shown per category
+- Winners: **one winner per category** selected manually by the admin; admin clicks to crown one team per category
 - Category labels come from `sessions.criteria_labels`
 
 ---
