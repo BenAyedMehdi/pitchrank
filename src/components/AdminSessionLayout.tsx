@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { ArrowLeft, Settings, Users, Mic, Radio, Trophy } from "lucide-react";
 import { JoinCodeDisplay } from "@/components/JoinCodeDisplay";
@@ -14,6 +15,27 @@ interface AdminSessionLayoutProps {
   contentClassName?: string;
 }
 
+interface CachedHeader {
+  name: string;
+  join_code: string;
+  status: "setup" | "active" | "closed";
+}
+
+function readHeaderCache(id: string): CachedHeader | null {
+  try {
+    const raw = sessionStorage.getItem(`session_header_${id}`);
+    return raw ? (JSON.parse(raw) as CachedHeader) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeHeaderCache(id: string, data: CachedHeader) {
+  try {
+    sessionStorage.setItem(`session_header_${id}`, JSON.stringify(data));
+  } catch { /* ignore */ }
+}
+
 const TABS = [
   { key: "setup", label: "Setup", icon: Settings, path: "setup" },
   { key: "lobby", label: "Lobby", icon: Users, path: "lobby" },
@@ -23,9 +45,9 @@ const TABS = [
 
 export function AdminSessionLayout({
   children,
-  sessionName = "IT Hub Hackathon 2025",
-  sessionCode = "HACK24",
-  status = "active",
+  sessionName,
+  sessionCode,
+  status,
   isLive = false,
   containerClassName,
   contentClassName,
@@ -33,6 +55,25 @@ export function AdminSessionLayout({
   const navigate = useNavigate();
   const { id } = useParams();
   const location = useLocation();
+
+  // Seed from cache so the header never flashes placeholder values on tab navigation
+  const [cached, setCached] = useState<CachedHeader | null>(() =>
+    id ? readHeaderCache(id) : null
+  );
+
+  // Persist to cache whenever we receive real session data from the page
+  useEffect(() => {
+    if (id && sessionName && sessionCode && status) {
+      const data: CachedHeader = { name: sessionName, join_code: sessionCode, status };
+      writeHeaderCache(id, data);
+      setCached(data);
+    }
+  }, [id, sessionName, sessionCode, status]);
+
+  const displayName = sessionName ?? cached?.name ?? "Loading…";
+  const displayCode = sessionCode ?? cached?.join_code ?? "------";
+  const displayStatus = status ?? cached?.status ?? "active";
+  const displayLive = isLive || (cached?.status === "active" && !status);
 
   const currentTab = TABS.find((t) => location.pathname.endsWith(`/${t.path}`))?.key ?? "setup";
 
@@ -51,8 +92,8 @@ export function AdminSessionLayout({
             </button>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="font-heading text-sm font-semibold truncate">{sessionName}</h1>
-                {isLive && (
+                <h1 className="font-heading text-sm font-semibold truncate">{displayName}</h1>
+                {displayLive && (
                   <span className="flex items-center gap-1 text-[10px] font-medium text-success uppercase tracking-wider">
                     <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse-dot" />
                     Live
@@ -60,8 +101,8 @@ export function AdminSessionLayout({
                 )}
               </div>
               <div className="flex items-center gap-2 mt-0.5">
-                <JoinCodeDisplay code={sessionCode} />
-                <SessionStatusBadge status={status} />
+                <JoinCodeDisplay code={displayCode} />
+                <SessionStatusBadge status={displayStatus} />
               </div>
             </div>
           </div>

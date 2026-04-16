@@ -94,7 +94,7 @@ export default function AdminLobbyScreen() {
 
   if (loading) {
     return (
-      <AdminSessionLayout>
+      <AdminSessionLayout containerClassName="max-w-[1200px]">
         <div className="flex items-center justify-center py-16">
           <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
         </div>
