@@ -114,10 +114,12 @@
 |----|-------|----------|------|
 | G11 | All scores displayed are **averages** (0–5 scale, e.g. 4.32) so that differences in voter turnout do not unfairly influence rankings | 🔴 | [x] |
 | G12 | Results page shows the **top 5 teams** for each category, ranked by their average score | 🔴 | [x] |
-| G13 | Admin can **manually select a winner** for each category from the ranked list (to handle the rule that a team cannot win more than one category); the UI clearly shows which teams are already assigned a win in another category | 🔴 | [x] |
-| G14 | The option to reveal individual category results separately is **removed**; instead, once the admin has selected winners for all categories, a single "Reveal All Results" button broadcasts the complete results to all participants simultaneously | 🔴 | [x] |
+| G13 | Admin can **manually select a winner** for each category from the ranked list; the UI clearly shows which teams are already assigned a win in another category; winners are persisted to the DB via a "Save Winners" button and auto-saved on reveal | 🔴 | [x] |
+| G14 | The option to reveal individual category results separately is **removed**; once the admin has selected winners for all categories, a single "Reveal All Results" button broadcasts the complete results to all participants simultaneously | 🔴 | [x] |
 | G15 | The admin results page has an improved layout optimised for laptop use: clear hierarchy, readable tables, winner cards, and good use of horizontal space | 🟡 | [x] |
 | G16 | Team colours (defined in G8) are used consistently on the results page to visually link scores and winner cards back to the correct team | 🟡 | [ ] |
+| G19 | Selected winner team members are shown in the admin "Crown the Winners" section and on all participant/public results screens | 🔴 | [x] |
+| G20 | Participant and public results screens show only the manually chosen winner per category (team name + members); all old ranking/podium/chart logic removed | 🔴 | [x] |
 
 ### CSV Export
 

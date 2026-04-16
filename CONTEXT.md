@@ -46,6 +46,8 @@ A real-time web app for live hackathon events. ~36 people in one room. 12 teams 
 | `timer_duration_seconds` | integer | Current pitch timer length (can be extended) |
 | `timer_paused_remaining_seconds` | integer nullable | Remaining seconds when timer is paused |
 | `timer_started_at` | timestamptz | Set when admin triggers timer |
+| `results_revealed_categories` | text[] | Category keys that have been revealed |
+| `category_winners` | jsonb | Map of category key → team UUID, e.g. `{"overall":"uuid","criterion-0":"uuid"}` |
 | `created_at` | timestamptz | |
 
 ### `teams`

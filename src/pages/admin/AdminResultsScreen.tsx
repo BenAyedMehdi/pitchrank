@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Award, CheckCircle2, Download, Loader2, Trophy } from "lucide-react";
+import { Award, CheckCircle2, Download, Loader2, Save, Trophy, Users } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -47,8 +47,10 @@ export default function AdminResultsScreen() {
   const [closingAllVoting, setClosingAllVoting] = useState(false);
   const [reopeningSession, setReopeningSession] = useState(false);
   const [exportingCsv, setExportingCsv] = useState(false);
+  const [savingWinners, setSavingWinners] = useState(false);
   const [selectedTeamByCategory, setSelectedTeamByCategory] = useState<Record<string, string>>({});
   const [selectedWinnerByCategory, setSelectedWinnerByCategory] = useState<Record<string, string | null>>({});
+  const hasHydratedWinnersRef = useRef(false);
 
   const loadData = async (sessionId: string) => {
     const [sessionRes, teamsRes, participantsRes, votesRes] = await Promise.all([
@@ -120,6 +122,16 @@ export default function AdminResultsScreen() {
     () => new Map(participants.map((participant) => [participant.id, participant.name])),
     [participants],
   );
+  const membersByTeamId = useMemo(() => {
+    const map = new Map<string, string[]>();
+    participants.forEach((p) => {
+      if (!p.team_id || p.is_observer) return;
+      const list = map.get(p.team_id) ?? [];
+      list.push(p.name);
+      map.set(p.team_id, list);
+    });
+    return map;
+  }, [participants]);
 
   const revealedCategoryKeys = session?.results_revealed_categories || [];
   const revealedCategoryKeySet = useMemo(() => new Set(revealedCategoryKeys), [revealedCategoryKeys]);
@@ -159,6 +171,16 @@ export default function AdminResultsScreen() {
     });
   }, [categories, teams]);
 
+  // Hydrate winner selection from DB once on initial load
+  useEffect(() => {
+    if (!session || hasHydratedWinnersRef.current) return;
+    hasHydratedWinnersRef.current = true;
+    const stored = session.category_winners as Record<string, string> | null;
+    if (stored && typeof stored === "object" && !Array.isArray(stored)) {
+      setSelectedWinnerByCategory((prev) => ({ ...prev, ...stored }));
+    }
+  }, [session]);
+
   const winnerCategoryByTeamId = useMemo(() => {
     const map = new Map<string, string>();
     categories.forEach((category) => {
@@ -168,6 +190,30 @@ export default function AdminResultsScreen() {
     });
     return map;
   }, [categories, selectedWinnerByCategory]);
+
+  const buildWinnersPayload = () => {
+    const payload: Record<string, string> = {};
+    Object.entries(selectedWinnerByCategory).forEach(([key, teamId]) => {
+      if (teamId) payload[key] = teamId;
+    });
+    return payload;
+  };
+
+  const saveWinners = async () => {
+    if (!id) return;
+    setSavingWinners(true);
+    const { error: saveError } = await supabase
+      .from("sessions")
+      .update({ category_winners: buildWinnersPayload() })
+      .eq("id", id);
+    setSavingWinners(false);
+    if (saveError) {
+      console.error("Failed to save winners:", saveError);
+      toast.error(saveError.message || "Failed to save winners");
+      return;
+    }
+    toast.success("Winners saved");
+  };
 
   const closeEveryVoting = async () => {
     if (!id) return;
@@ -279,11 +325,13 @@ export default function AdminResultsScreen() {
     if (!id || !session) return;
 
     setRevealingAll(true);
+    const winnersPayload = buildWinnersPayload();
     const { error: updateError } = await supabase
       .from("sessions")
       .update({
         status: "results_revealed",
         results_revealed_categories: allCategoryKeys,
+        category_winners: winnersPayload,
       })
       .eq("id", id);
 
@@ -301,6 +349,7 @@ export default function AdminResultsScreen() {
             ...prev,
             status: "results_revealed",
             results_revealed_categories: allCategoryKeys,
+            category_winners: winnersPayload,
           }
         : prev
     ));
@@ -468,16 +517,27 @@ export default function AdminResultsScreen() {
             <div className="relative overflow-hidden rounded-2xl border-2 border-amber-200 bg-gradient-to-br from-amber-50 via-card to-card p-5">
               <div className="absolute -right-8 -top-8 h-32 w-32 rounded-full bg-amber-300/30 blur-3xl" />
               <div className="absolute -left-4 -bottom-4 h-24 w-24 rounded-full bg-yellow-300/20 blur-2xl" />
-              <div className="relative mb-5 flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600 shadow-sm">
-                  <Trophy className="h-5 w-5" />
+              <div className="relative mb-5 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 text-amber-600 shadow-sm">
+                    <Trophy className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-heading text-base font-semibold">Crown the Winners</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Click a team to select them as the winner for each category. Teams already crowned elsewhere are flagged.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-heading text-base font-semibold">Crown the Winners</h3>
-                  <p className="text-xs text-muted-foreground">
-                    Click a team to select them as the winner for each category. Teams already crowned elsewhere are flagged.
-                  </p>
-                </div>
+                <Button
+                  onClick={() => void saveWinners()}
+                  disabled={savingWinners || !manualWinnersReady}
+                  variant="outline"
+                  className="border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                >
+                  <Save className="h-4 w-4" />
+                  {savingWinners ? "Saving..." : "Save Winners"}
+                </Button>
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
@@ -561,6 +621,24 @@ export default function AdminResultsScreen() {
                                       <span className="mt-0.5 inline-flex items-center gap-1 rounded border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[11px] text-violet-700">
                                         Already won {winnerCategory}
                                       </span>
+                                    ) : null}
+                                    {isSelected ? (
+                                      <div className="mt-1.5 flex flex-wrap gap-1">
+                                        {(membersByTeamId.get(team.teamId) ?? []).length > 0 ? (
+                                          <>
+                                            <span className="inline-flex items-center gap-0.5 text-[11px] text-amber-700">
+                                              <Users className="h-3 w-3" />
+                                            </span>
+                                            {(membersByTeamId.get(team.teamId) ?? []).map((name) => (
+                                              <span key={name} className="rounded border border-amber-200 bg-amber-100 px-1.5 py-0.5 text-[11px] text-amber-800">
+                                                {name}
+                                              </span>
+                                            ))}
+                                          </>
+                                        ) : (
+                                          <span className="text-[11px] text-amber-600 italic">No members registered</span>
+                                        )}
+                                      </div>
                                     ) : null}
                                   </div>
                                 </div>
