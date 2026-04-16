@@ -540,8 +540,8 @@ export default function AdminResultsScreen() {
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex min-w-0 items-center gap-2.5">
                                   {isSelected ? (
-                                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 text-base shadow-sm">
-                                      🏆
+                                    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-400 text-white shadow-sm">
+                                      <Trophy className="h-3.5 w-3.5" />
                                     </span>
                                   ) : (
                                     <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
