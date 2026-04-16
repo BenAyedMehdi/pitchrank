@@ -1,7 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Timer, Lock, ArrowRight, CheckCircle2, Clock, Search, ChevronDown, ChevronUp, BarChart3, Users, Pause, Play, Plus } from "lucide-react";
+import {
+  Timer,
+  Lock,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  Search,
+  ChevronDown,
+  ChevronUp,
+  BarChart3,
+  Users,
+  Pause,
+  Play,
+  Plus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -13,7 +27,6 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 
-// Steps for the pitch flow (G6: "Start Timer" is now a separate, explicit step)
 const STEPS = [
   {
     key: "start",
@@ -35,7 +48,7 @@ const STEPS = [
   },
   {
     key: "next",
-    label: "Next Team →",
+    label: "Next Team ->",
     icon: ArrowRight,
     helper: "Advances to the next team and resets the voting flow.",
   },
@@ -60,10 +73,7 @@ export default function AdminPitchScreen() {
     const [sessionRes, teamsRes, participantsRes, votesRes] = await Promise.all([
       supabase.from("sessions").select("*").eq("id", sessionId).single(),
       supabase.from("teams").select("*").eq("session_id", sessionId).order("pitch_order"),
-      supabase
-        .from("participants")
-        .select("*, teams(name)")
-        .eq("session_id", sessionId),
+      supabase.from("participants").select("*, teams(name)").eq("session_id", sessionId),
       supabase.from("votes").select("*").eq("session_id", sessionId),
     ]);
 
@@ -89,6 +99,7 @@ export default function AdminPitchScreen() {
 
   useEffect(() => {
     if (!id) return;
+
     setLoading(true);
     loadData(id)
       .catch((error) => {
@@ -119,14 +130,13 @@ export default function AdminPitchScreen() {
   const selectedTeamRow = teams[selectedTeam] ?? null;
   const activePitchIndex = session?.current_pitch_index ?? -1;
   const pitchSelected = session?.status === "active" && activePitchIndex >= 0;
-  const timerRemaining = session ? getSessionTimerRemaining(session, nowMs) : 0;
   const timerPaused = session ? isTimerPaused(session) : false;
-  // timerHasStarted: pitch is active AND admin has explicitly started the timer (G6)
+  const timerRemaining = session ? getSessionTimerRemaining(session, nowMs) : 0;
   const timerHasStarted =
     pitchSelected &&
     (session?.timer_started_at != null || session?.timer_paused_remaining_seconds != null);
+  const timerRunning = timerHasStarted && !timerPaused && timerRemaining > 0;
   const currentPitchTeam = teams.find((team) => team.pitch_order === activePitchIndex) ?? null;
-
   const trackedTeam = selectedTeamRow ?? currentPitchTeam;
 
   const votedIds = useMemo(() => {
@@ -138,8 +148,12 @@ export default function AdminPitchScreen() {
   const allVoterRows = useMemo(() => {
     return participants.map((p) => ({
       id: p.id,
-      name: p.name,
-      team: p.is_observer ? "Observer" : (p.teams?.name ?? "No team"),
+      name: typeof p.name === "string" && p.name.trim().length > 0 ? p.name : "Unknown voter",
+      team: p.is_observer
+        ? "Observer"
+        : typeof p.teams?.name === "string" && p.teams.name.trim().length > 0
+          ? p.teams.name
+          : "No team",
       isTeamMember: Boolean(trackedTeam && !p.is_observer && p.team_id === trackedTeam.id),
       voted: votedIds.has(p.id),
     }));
@@ -147,10 +161,9 @@ export default function AdminPitchScreen() {
 
   const visibleVoters = useMemo(() => {
     const search = filter.trim().toLowerCase();
-    const rows = allVoterRows;
     const filtered = search
-      ? rows.filter((r) => r.name.toLowerCase().includes(search) || r.team.toLowerCase().includes(search))
-      : rows;
+      ? allVoterRows.filter((r) => r.name.toLowerCase().includes(search) || r.team.toLowerCase().includes(search))
+      : allVoterRows;
     return filtered.sort((a, b) => Number(a.voted) - Number(b.voted));
   }, [allVoterRows, filter]);
 
@@ -159,51 +172,47 @@ export default function AdminPitchScreen() {
   const totalVoters = eligibleVoters.length;
   const percentage = totalVoters === 0 ? 0 : Math.round((votedCount / totalVoters) * 100);
   const teamMemberCount = allVoterRows.filter((v) => v.isTeamMember).length;
+
   const teamsWithStartedVoting = useMemo(() => {
     const ids = new Set(votes.map((vote) => vote.team_id));
-    if (pitchSelected && currentPitchTeam?.id) {
-      ids.add(currentPitchTeam.id);
-    }
+    if (pitchSelected && currentPitchTeam?.id) ids.add(currentPitchTeam.id);
     return ids;
   }, [votes, pitchSelected, currentPitchTeam?.id]);
 
-  // G7: per-team vote completion status
   const teamVoteStatus = useMemo(() => {
     const result = new Map<string, "all-voted" | "in-progress">();
+
     for (const teamId of teamsWithStartedVoting) {
       const team = teams.find((t) => t.id === teamId);
       if (!team) continue;
-      const teamVotedIds = new Set(
-        votes.filter((v) => v.team_id === teamId).map((v) => v.participant_id),
-      );
-      // Eligible = everyone who is NOT a (non-observer) member of the pitching team
+
+      const teamVotedIds = new Set(votes.filter((v) => v.team_id === teamId).map((v) => v.participant_id));
       const eligible = participants.filter((p) => p.is_observer || p.team_id !== team.id);
-      const allVoted =
-        eligible.length > 0 && eligible.every((p) => teamVotedIds.has(p.id));
+      const allVoted = eligible.length > 0 && eligible.every((p) => teamVotedIds.has(p.id));
       result.set(teamId, allVoted ? "all-voted" : "in-progress");
     }
+
     return result;
-  }, [teams, votes, participants, teamsWithStartedVoting]);
+  }, [teamsWithStartedVoting, teams, votes, participants]);
 
   const pitchesCompleted = session && session.current_pitch_index >= 0 ? session.current_pitch_index + 1 : 0;
-  // activeStep: 0=start pitch, 1=start timer, 2=close voting, 3=next team (G6)
   const activeStep = !pitchSelected ? 0 : !timerHasStarted ? 1 : 2;
 
   useEffect(() => {
-    // Only tick the clock while the timer is actively counting down
-    if (!timerHasStarted || timerPaused) return;
-
+    if (!timerRunning) return;
     const interval = window.setInterval(() => setNowMs(Date.now()), 250);
     return () => window.clearInterval(interval);
-  }, [timerHasStarted, timerPaused]);
+  }, [timerRunning]);
 
   const handleStartPitch = async () => {
     if (!id || !selectedTeamRow) return;
+
     setStartingPitch(true);
     const { error: startError } = await supabase.rpc("start_pitch", {
       p_session_id: id,
       p_team_id: selectedTeamRow.id,
     });
+
     if (startError) {
       console.error("Failed to start pitch:", startError);
       toast.error(startError.message || "Failed to start pitch");
@@ -211,21 +220,38 @@ export default function AdminPitchScreen() {
       return;
     }
 
+    // Keep G6 behavior even if RPC implementation differs: pitch start must not auto-start timer.
+    const { error: resetTimerError } = await supabase
+      .from("sessions")
+      .update({
+        timer_started_at: null,
+        timer_duration_seconds: session?.timer_default_seconds ?? 60,
+        timer_paused_remaining_seconds: null,
+      })
+      .eq("id", id);
+
+    if (resetTimerError) {
+      console.error("Failed to reset timer after pitch start:", resetTimerError);
+      toast.error(resetTimerError.message || "Failed to reset timer after pitch start");
+      setStartingPitch(false);
+      return;
+    }
+
     await loadData(id);
     setNowMs(Date.now());
     setStartingPitch(false);
-    toast.success(`Pitch started for ${selectedTeamRow.name}`);
+    toast.success(`Pitch started for ${selectedTeamRow.name}. Start timer when voting should begin.`);
   };
 
-  // G6: timer starts only when the admin explicitly triggers it
   const handleStartTimer = async () => {
-    if (!id || !pitchSelected || timerHasStarted) return;
+    if (!id || !session || !pitchSelected || timerHasStarted) return;
+
     setStartingTimer(true);
     const { error } = await supabase
       .from("sessions")
       .update({
         timer_started_at: new Date().toISOString(),
-        timer_duration_seconds: session?.timer_default_seconds ?? 60,
+        timer_duration_seconds: session.timer_default_seconds ?? 60,
         timer_paused_remaining_seconds: null,
       })
       .eq("id", id);
@@ -270,7 +296,7 @@ export default function AdminPitchScreen() {
   };
 
   const handlePauseTimer = async () => {
-    if (!id || !session || !timerHasStarted || timerPaused) return;
+    if (!id || !session || !timerHasStarted || timerPaused || timerRemaining <= 0) return;
 
     const remaining = getSessionTimerRemaining(session, Date.now());
     const { error } = await supabase
@@ -349,84 +375,93 @@ export default function AdminPitchScreen() {
   if (loading) {
     return (
       <AdminSessionLayout containerClassName="max-w-[1100px]">
-        <div className="py-10 text-sm text-muted-foreground text-center">Loading pitch data...</div>
+        <div className="py-10 text-center text-sm text-muted-foreground">Loading pitch data...</div>
+      </AdminSessionLayout>
+    );
+  }
+
+  if (!session) {
+    return (
+      <AdminSessionLayout>
+        <Card className="space-y-2 p-6 text-center">
+          <p className="text-sm font-medium">Unable to load session data.</p>
+          <p className="text-xs text-muted-foreground">Please go back to sessions and reopen this page.</p>
+        </Card>
       </AdminSessionLayout>
     );
   }
 
   return (
     <AdminSessionLayout
-      sessionName={session?.name}
-      sessionCode={session?.join_code}
-      status={statusMap(session?.status)}
-      isLive={session?.status === "active"}
+      sessionName={session.name}
+      sessionCode={session.join_code}
+      status={statusMap(session.status)}
+      isLive={session.status === "active"}
       containerClassName="max-w-[1100px]"
       contentClassName="py-6 lg:py-8"
     >
       <div className="space-y-6">
-        {/* Section 1 — Current Pitch Status */}
         <div className="rounded-2xl border bg-card px-4 py-5 md:px-6 md:py-6">
-          <div className="text-center space-y-1">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          <div className="space-y-1 text-center">
+            <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
               {pitchSelected
                 ? `Pitch ${activePitchIndex + 1} of ${teams.length}`
                 : `No pitch started yet${teams.length > 0 ? ` · ${teams.length} teams ready` : ""}`}
             </p>
-            <h2 className="font-heading text-2xl md:text-3xl font-bold">
+            <h2 className="font-heading text-2xl font-bold md:text-3xl">
               {pitchSelected ? currentPitchTeam?.name : selectedTeamRow?.name ?? "No teams configured"}
             </h2>
             <p className="text-xs text-muted-foreground">
               {!pitchSelected
                 ? "Select a team and press Start Pitch"
                 : !timerHasStarted
-                  ? `Pitch in progress · Press "Start Timer" when team is done pitching`
+                  ? "Pitch in progress · Press Start Timer when team is done pitching"
                   : timerPaused
                     ? `Timer paused · ${timerRemaining}s remaining`
-                    : `Timer running · ${timerRemaining}s remaining`}
+                    : timerRemaining > 0
+                      ? `Timer running · ${timerRemaining}s remaining`
+                      : "Timer finished · Close voting or continue manually"}
             </p>
           </div>
         </div>
 
-        {/* Section 5 — Team Selector (horizontal pills) */}
         <div className="space-y-2">
-          <div className="flex gap-1.5 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-hide">
+          <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-2 scrollbar-hide">
             {teams.map((team, i) => (
               <button
                 key={team.id}
                 onClick={() => setSelectedTeam(i)}
                 className={cn(
-                  "relative shrink-0 px-3 py-1.5 rounded-full text-xs font-medium transition-colors border",
-                  pitchSelected && i === activePitchIndex && "border-success text-success bg-success/10",
+                  "relative shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  pitchSelected && i === activePitchIndex && "border-success bg-success/10 text-success",
                   i === selectedTeam
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-card text-muted-foreground border-border hover:text-foreground hover:border-foreground/20"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:border-foreground/20 hover:text-foreground",
                 )}
               >
                 {team.name}
                 {pitchSelected && i === activePitchIndex ? " (pitching)" : ""}
-                {/* G7: yellow = in-progress, green = all voters submitted */}
-                {teamVoteStatus.has(team.id) ? (
-                  teamVoteStatus.get(team.id) === "all-voted" ? (
-                    <span className="absolute -top-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-success text-success-foreground border border-background">
-                      <CheckCircle2 className="w-3 h-3" />
-                    </span>
-                  ) : (
-                    <span className="absolute -top-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-yellow-500 text-white border border-background">
-                      <Clock className="w-3 h-3" />
-                    </span>
-                  )
-                ) : null}
+                {teamVoteStatus.has(team.id)
+                  ? teamVoteStatus.get(team.id) === "all-voted"
+                    ? (
+                      <span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-background bg-success text-success-foreground">
+                        <CheckCircle2 className="h-3 w-3" />
+                      </span>
+                    )
+                    : (
+                      <span className="absolute -right-1 -top-1 inline-flex h-4 w-4 items-center justify-center rounded-full border border-background bg-yellow-500 text-white">
+                        <Clock className="h-3 w-3" />
+                      </span>
+                    )
+                  : null}
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-muted-foreground text-center">
-            Only advance to a team once their pitch has started.
-          </p>
+          <p className="text-center text-[10px] text-muted-foreground">Only advance to a team once their pitch has started.</p>
         </div>
 
         <div className="grid gap-5 lg:grid-cols-12">
-          {/* Section 2 — Action Buttons */}
-          <Card className="p-4 md:p-5 space-y-3 lg:col-span-4 lg:sticky lg:top-24 h-fit">
+          <Card className="h-fit space-y-3 p-4 md:p-5 lg:sticky lg:top-24 lg:col-span-4">
             <h3 className="font-heading text-sm font-semibold">Pitch flow</h3>
             <div className="space-y-2">
               {STEPS.map((step, i) => {
@@ -439,16 +474,16 @@ export default function AdminPitchScreen() {
                     <Button
                       variant={isActive ? "default" : "outline"}
                       className={cn(
-                        "w-full h-11 justify-start gap-2 text-sm",
-                        isDone && "bg-success/10 border-success/30 text-success hover:bg-success/15",
-                        isFuture && "opacity-40"
+                        "h-11 w-full justify-start gap-2 text-sm",
+                        isDone && "border-success/30 bg-success/10 text-success hover:bg-success/15",
+                        isFuture && "opacity-40",
                       )}
                       disabled={
                         isFuture ||
                         (step.key === "start" &&
                           (!selectedTeamRow ||
                             startingPitch ||
-                            (pitchSelected && currentPitchTeam?.id === selectedTeamRow?.id))) ||
+                            (pitchSelected && currentPitchTeam?.id === selectedTeamRow.id))) ||
                         (step.key === "timer" && (!pitchSelected || timerHasStarted || startingTimer)) ||
                         (step.key === "close" && (!pitchSelected || stoppingPitch))
                       }
@@ -468,143 +503,130 @@ export default function AdminPitchScreen() {
                         toast.info(`${step.label} is not wired yet.`);
                       }}
                     >
-                      {isDone ? (
-                        <CheckCircle2 className="w-4 h-4" />
-                      ) : (
-                        <step.icon className="w-4 h-4" />
-                      )}
+                      {isDone ? <CheckCircle2 className="h-4 w-4" /> : <step.icon className="h-4 w-4" />}
                       {step.key === "start" && pitchSelected && currentPitchTeam?.id === selectedTeamRow?.id
                         ? "Pitch in progress"
                         : step.key === "timer" && startingTimer
-                          ? "Starting timer…"
+                          ? "Starting timer..."
                           : step.key === "close" && timerHasStarted
                             ? `Close voting (${timerRemaining}s)`
                             : step.label}
                     </Button>
-                    <p className="text-[10px] text-muted-foreground pl-1">{step.helper}</p>
+                    <p className="pl-1 text-[10px] text-muted-foreground">{step.helper}</p>
                   </div>
                 );
               })}
             </div>
-            <div className="pt-2 border-t space-y-2">
+
+            <div className="space-y-2 border-t pt-2">
               <Button
                 variant="outline"
-                className="w-full h-10 justify-start gap-2 text-sm"
-                disabled={!timerHasStarted || timerPaused}
+                className="h-10 w-full justify-start gap-2 text-sm"
+                disabled={!timerHasStarted || timerPaused || timerRemaining <= 0}
                 onClick={() => void handlePauseTimer()}
               >
-                <Pause className="w-4 h-4" />
+                <Pause className="h-4 w-4" />
                 Pause timer
               </Button>
               <Button
                 variant="outline"
-                className="w-full h-10 justify-start gap-2 text-sm"
+                className="h-10 w-full justify-start gap-2 text-sm"
                 disabled={!timerHasStarted || !timerPaused}
                 onClick={() => void handleResumeTimer()}
               >
-                <Play className="w-4 h-4" />
+                <Play className="h-4 w-4" />
                 Resume timer
               </Button>
               <Button
                 variant="outline"
-                className="w-full h-10 justify-start gap-2 text-sm"
+                className="h-10 w-full justify-start gap-2 text-sm"
                 disabled={!timerHasStarted}
                 onClick={() => void handleExtendTimer()}
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="h-4 w-4" />
                 Extend timer (+30s)
               </Button>
             </div>
           </Card>
 
           <div className="space-y-5 lg:col-span-8">
-            {/* Section 3 — Voter Tracking */}
-            <Card className="p-4 md:p-5 space-y-4">
-              <h3 className="font-heading text-sm font-semibold">
-                Voter status{trackedTeam ? ` · ${trackedTeam.name}` : ""}
-              </h3>
+            <Card className="space-y-4 p-4 md:p-5">
+              <h3 className="font-heading text-sm font-semibold">Voter status{trackedTeam ? ` · ${trackedTeam.name}` : ""}</h3>
 
-              {/* Summary */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">
                     Voted: {votedCount} / {totalVoters}
                   </span>
-                  <span className="text-muted-foreground text-xs">
-                    Not yet: {totalVoters - votedCount}
-                  </span>
+                  <span className="text-xs text-muted-foreground">Not yet: {totalVoters - votedCount}</span>
                 </div>
                 {teamMemberCount > 0 ? (
                   <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                    <Users className="w-3 h-3" />
+                    <Users className="h-3 w-3" />
                     {teamMemberCount} team member{teamMemberCount > 1 ? "s" : ""} excluded from voting count
                   </div>
                 ) : null}
                 <Progress value={percentage} className="h-2" />
-                <p className="text-[10px] text-muted-foreground text-right">{percentage}%</p>
+                <p className="text-right text-[10px] text-muted-foreground">{percentage}%</p>
               </div>
 
-              {/* Filter */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={filter}
                   onChange={(e) => setFilter(e.target.value)}
                   placeholder="Filter by name..."
-                  className="h-9 pl-9 text-xs bg-background"
+                  className="h-9 bg-background pl-9 text-xs"
                 />
               </div>
 
-              {/* Voter list */}
-              <div className="max-h-[420px] overflow-y-auto space-y-1.5 -mx-1 px-1">
+              <div className="-mx-1 max-h-[420px] space-y-1.5 overflow-y-auto px-1">
                 {!trackedTeam ? (
-                  <div className="py-8 text-center text-xs text-muted-foreground">
-                    Select a team to see voter status.
-                  </div>
+                  <div className="py-8 text-center text-xs text-muted-foreground">Select a team to see voter status.</div>
                 ) : null}
+
                 {visibleVoters.map((voter, i) => (
                   <motion.div
                     key={voter.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ delay: i * 0.02 }}
-                    className="flex items-center justify-between py-2 px-2.5 rounded-lg hover:bg-muted/50 transition-colors"
+                    className="flex items-center justify-between rounded-lg px-2.5 py-2 transition-colors hover:bg-muted/50"
                   >
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                        <span className="text-[10px] font-semibold text-primary">
-                          {voter.name[0]}
-                        </span>
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-primary/10">
+                        <span className="text-[10px] font-semibold text-primary">{voter.name?.[0] ?? "?"}</span>
                       </div>
                       <div>
                         <p className="text-xs font-medium leading-tight">{voter.name}</p>
                         <p className="text-[10px] text-muted-foreground">{voter.team}</p>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+
+                    <div className="flex shrink-0 items-center gap-2">
                       {voter.isTeamMember ? (
                         <>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full border font-medium bg-yellow-100 text-yellow-900 border-yellow-300">
+                          <span className="rounded-full border border-yellow-300 bg-yellow-100 px-2 py-0.5 text-[10px] font-medium text-yellow-900">
                             Team-member
                           </span>
-                          <Clock className="w-4 h-4 text-yellow-700" />
+                          <Clock className="h-4 w-4 text-yellow-700" />
                         </>
                       ) : (
                         <>
                           <span
                             className={cn(
-                              "text-[10px] px-2 py-0.5 rounded-full border font-medium",
+                              "rounded-full border px-2 py-0.5 text-[10px] font-medium",
                               voter.voted
-                                ? "bg-success/10 text-success border-success/30"
-                                : "bg-muted text-muted-foreground border-border"
+                                ? "border-success/30 bg-success/10 text-success"
+                                : "border-border bg-muted text-muted-foreground",
                             )}
                           >
                             {voter.voted ? "Voted" : "Pending"}
                           </span>
                           {voter.voted ? (
-                            <CheckCircle2 className="w-4 h-4 text-success" />
+                            <CheckCircle2 className="h-4 w-4 text-success" />
                           ) : (
-                            <Clock className="w-4 h-4 text-muted-foreground" />
+                            <Clock className="h-4 w-4 text-muted-foreground" />
                           )}
                         </>
                       )}
@@ -614,29 +636,25 @@ export default function AdminPitchScreen() {
               </div>
             </Card>
 
-            {/* Section 4 — Session Stats (collapsible) */}
             <Card className="overflow-hidden">
               <button
                 onClick={() => setStatsOpen(!statsOpen)}
-                className="w-full flex items-center justify-between p-4 text-sm font-semibold font-heading hover:bg-muted/30 transition-colors"
+                className="flex w-full items-center justify-between p-4 font-heading text-sm font-semibold transition-colors hover:bg-muted/30"
               >
                 <span className="flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-muted-foreground" />
+                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
                   Session stats
                 </span>
                 {statsOpen ? (
-                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
                 ) : (
-                  <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 )}
               </button>
-              {statsOpen && (
-                <motion.div
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: "auto" }}
-                  className="px-4 pb-4"
-                >
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+
+              {statsOpen ? (
+                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="px-4 pb-4">
+                  <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                     {[
                       { label: "Total votes cast", value: String(votes.length) },
                       {
@@ -646,17 +664,14 @@ export default function AdminPitchScreen() {
                       { label: "Pitches completed", value: `${pitchesCompleted} / ${teams.length}` },
                       { label: "Participation rate", value: `${percentage}%` },
                     ].map((stat) => (
-                      <div
-                        key={stat.label}
-                        className="bg-muted/50 rounded-lg p-3 text-center"
-                      >
-                        <p className="text-lg font-heading font-bold">{stat.value}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">{stat.label}</p>
+                      <div key={stat.label} className="rounded-lg bg-muted/50 p-3 text-center">
+                        <p className="font-heading text-lg font-bold">{stat.value}</p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">{stat.label}</p>
                       </div>
                     ))}
                   </div>
                 </motion.div>
-              )}
+              ) : null}
             </Card>
           </div>
         </div>

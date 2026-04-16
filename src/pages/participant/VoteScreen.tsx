@@ -26,14 +26,15 @@ export default function VoteScreen() {
   const [teams, setTeams] = useState<Tables<"teams">[]>([]);
   const teamsRef = useRef<Tables<"teams">[]>([]);
   const [scores, setScores] = useState<Array<number | null>>([]);
-  const [alreadyVoted, setAlreadyVoted] = useState(false);
+  const [existingVoteId, setExistingVoteId] = useState<string | null>(null);
+  const [existingVoteScores, setExistingVoteScores] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [nowMs, setNowMs] = useState(Date.now());
 
-  const hasVotedForTeam = async (sessionId: string, participantId: string, teamId: string) => {
+  const getExistingVoteForTeam = async (sessionId: string, participantId: string, teamId: string) => {
     const { data, error } = await supabase
       .from("votes")
-      .select("id")
+      .select("id, criteria_scores")
       .eq("session_id", sessionId)
       .eq("participant_id", participantId)
       .eq("team_id", teamId)
@@ -41,10 +42,10 @@ export default function VoteScreen() {
 
     if (error) {
       console.error("Failed to check existing vote:", error);
-      return false;
+      return null;
     }
 
-    return Boolean(data);
+    return data;
   };
 
   useEffect(() => {
@@ -74,18 +75,21 @@ export default function VoteScreen() {
         (team) => team.pitch_order === sessionRes.data.current_pitch_index,
       );
       if (currentPitchTeam) {
-        const alreadyVotedForPitch = await hasVotedForTeam(
+        const existingVote = await getExistingVoteForTeam(
           sessionRes.data.id,
           participant.id,
           currentPitchTeam.id,
         );
-        setAlreadyVoted(alreadyVotedForPitch);
+        const alreadyVotedForPitch = Boolean(existingVote);
+        setExistingVoteId(existingVote?.id ?? null);
+        setExistingVoteScores(existingVote?.criteria_scores ?? []);
         if (!shouldRouteToVote(nextRoute, alreadyVotedForPitch)) {
           navigate("/lobby");
           return;
         }
       } else {
-        setAlreadyVoted(false);
+        setExistingVoteId(null);
+        setExistingVoteScores([]);
       }
 
       setSession(sessionRes.data);
@@ -130,7 +134,8 @@ export default function VoteScreen() {
   const criteriaLabels = normalizeCriteriaLabels(session?.criteria_labels);
   const criteriaDisplayLabels = criteriaLabels.map((label, index) => (label.length > 0 ? label : `Criteria ${index + 1}`));
   const isOwnTeamPitch = !!participant && !!currentPitch && !participant.isObserver && participant.teamId === currentPitch.id;
-  const canSubmit = isCompleteVote(scores, criteriaLabels.length) && !alreadyVoted && !isOwnTeamPitch && !submitting;
+  const hasExistingVote = Boolean(existingVoteId);
+  const canSubmit = isCompleteVote(scores, criteriaLabels.length) && !isOwnTeamPitch && !submitting;
   const timerRemaining = session ? getSessionTimerRemaining(session, nowMs) : 0;
   const timerRunning = timerRemaining > 0;
   const timerPaused = session ? isTimerPaused(session) : false;
@@ -152,8 +157,29 @@ export default function VoteScreen() {
   }, [navigate, nowMs, session]);
 
   useEffect(() => {
+    if (criteriaLabels.length === 0) {
+      setScores([]);
+      return;
+    }
+
+    if (hasExistingVote && existingVoteScores.length > 0) {
+      setScores(
+        Array.from({ length: criteriaLabels.length }, (_, index) => {
+          const score = existingVoteScores[index];
+          return typeof score === "number" ? score : null;
+        }),
+      );
+      return;
+    }
+
     setScores(Array(criteriaLabels.length).fill(null));
-  }, [session?.id, session?.current_pitch_index, criteriaLabels.length]);
+  }, [
+    criteriaLabels.length,
+    existingVoteScores,
+    hasExistingVote,
+    session?.id,
+    session?.current_pitch_index,
+  ]);
 
   const setScore = (criteriaIndex: number, value: number) => {
     setScores((prev) => prev.map((score, i) => (i === criteriaIndex ? value : score)));
@@ -164,25 +190,36 @@ export default function VoteScreen() {
 
     setSubmitting(true);
     const criteriaScores = mapScoresToCriteriaScores(scores);
-    const { error } = await supabase.from("votes").insert({
-      session_id: session.id,
-      participant_id: participant.id,
-      team_id: currentPitch.id,
-      criteria_scores: criteriaScores,
-    });
+    const { data, error } = hasExistingVote
+      ? await supabase
+        .from("votes")
+        .update({ criteria_scores: criteriaScores })
+        .eq("id", existingVoteId!)
+        .select("id, criteria_scores")
+        .single()
+      : await supabase
+        .from("votes")
+        .insert({
+          session_id: session.id,
+          participant_id: participant.id,
+          team_id: currentPitch.id,
+          criteria_scores: criteriaScores,
+        })
+        .select("id, criteria_scores")
+        .single();
 
     if (error) {
       console.error("Failed to submit vote:", error);
-      toast.error(error.message || "Failed to submit vote");
+      toast.error(error.message || "Failed to save vote");
       setSubmitting(false);
       return;
     }
 
-    setAlreadyVoted(true);
+    setExistingVoteId(data.id);
+    setExistingVoteScores(data.criteria_scores || []);
     setSubmitting(false);
-    toast.success("Vote submitted");
+    toast.success(hasExistingVote ? "Vote updated" : "Vote submitted");
     setLastVotedTeam(currentPitch.name);
-    navigate("/lobby");
   };
 
   if (!participant) return null;
@@ -263,7 +300,7 @@ export default function VoteScreen() {
                               ? "bg-primary text-primary-foreground border-primary shadow-sm scale-[1.02]"
                               : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
                           )}
-                          disabled={alreadyVoted || submitting}
+                          disabled={submitting}
                         >
                           {value}
                         </button>
@@ -279,11 +316,16 @@ export default function VoteScreen() {
                 className="w-full h-11"
               >
                 {submitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                {alreadyVoted ? "Vote already submitted" : "Submit vote"}
+                {hasExistingVote ? "Update vote" : "Submit vote"}
               </Button>
 
-              {!alreadyVoted && !isCompleteVote(scores, criteriaLabels.length) ? (
+              {!isCompleteVote(scores, criteriaLabels.length) ? (
                 <p className="text-xs text-muted-foreground">Please rate every criteria before submitting.</p>
+              ) : null}
+              {hasExistingVote ? (
+                <p className="text-xs text-muted-foreground">
+                  You can edit your submitted vote while voting remains open.
+                </p>
               ) : null}
             </>
           )}

@@ -1,16 +1,50 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Zap } from "lucide-react";
+import { Loader2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
+import { clearParticipant, getParticipant } from "@/lib/participantStore";
+import { getParticipantRoute } from "@/lib/sessionRouting";
 
 export default function JoinCodeScreen() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [restoring, setRestoring] = useState(true);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      const participant = getParticipant();
+      if (!participant) {
+        setRestoring(false);
+        return;
+      }
+
+      const [sessionRes, participantRes] = await Promise.all([
+        supabase.from("sessions").select("*").eq("id", participant.sessionId).maybeSingle(),
+        supabase
+          .from("participants")
+          .select("id")
+          .eq("id", participant.id)
+          .eq("session_id", participant.sessionId)
+          .maybeSingle(),
+      ]);
+
+      if (sessionRes.error || participantRes.error || !sessionRes.data || !participantRes.data) {
+        clearParticipant();
+        setRestoring(false);
+        return;
+      }
+
+      const nextRoute = getParticipantRoute(sessionRes.data);
+      navigate(nextRoute, { replace: true });
+    };
+
+    void restoreSession().finally(() => setRestoring(false));
+  }, [navigate]);
 
   const handleJoin = async () => {
     const trimmed = code.trim().toUpperCase();
@@ -39,6 +73,14 @@ export default function JoinCodeScreen() {
 
     navigate(`/join/${data.join_code}`);
   };
+
+  if (restoring) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6">

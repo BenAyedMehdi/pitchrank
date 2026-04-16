@@ -9,14 +9,10 @@ export function isVotingOpen(
 ): boolean {
   if (session.status !== "active" || session.current_pitch_index < 0) return false;
 
-  // Timer has not been started yet — voting is open so participants can fill in
-  // scores while the team pitches; the countdown starts explicitly later (G6).
   const noTimerStarted =
     session.timer_started_at === null && session.timer_paused_remaining_seconds === null;
   if (noTimerStarted) return true;
 
-  // Timer has been started (or is paused with remaining seconds) — keep voting
-  // open until the countdown reaches zero.
   return getSessionTimerRemaining(session, nowMs) > 0;
 }
 
