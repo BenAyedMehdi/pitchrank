@@ -168,8 +168,8 @@ VITE_ADMIN_PASSWORD=
 6. Results hidden until admin explicitly reveals them
 7. No auth — admin password is a hardcoded env var
 8. RLS disabled on all tables (internal tool)
-9. Participant identity stored in localStorage as `participant_data` (key: `participant_data`)
-10. Admin auth stored in localStorage as `admin_auth`
+9. Participant identity stored in localStorage with key `participant_data`
+10. Admin auth stored in localStorage with key `admin_auth`
 11. Session must have at least 2 admin-defined criteria before activation
 12. Voter exclusion: admin can mark any participant (non-team-member) as excluded via the Pitch tab; excluded scores are omitted from ALL team averages (not just teams they didn't vote for); exclusion is togglable and persists in `participants.is_excluded`
 13. Session restore on page load: if `participant_data` is in localStorage and the session is still active (`active` or `voting_closed`), the participant is silently restored to the correct screen. If the session is `results_revealed`, the join code entry is shown instead (with a banner linking back to previous results) so the participant can join a fresh new session. Stale localStorage data is cleared when the participant enters a new join code.

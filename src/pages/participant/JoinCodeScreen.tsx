@@ -48,7 +48,7 @@ export default function JoinCodeScreen() {
       // Show the join form so the user can enter a new code, but keep a
       // non-intrusive link back to the previous results.
       if (sessionRes.data.status === "results_revealed") {
-        setPreviousSession({ sessionName: sessionRes.data.name });
+        setPreviousSession({ sessionName: sessionRes.data.name ?? "Previous session" });
         setRestoring(false);
         return;
       }
