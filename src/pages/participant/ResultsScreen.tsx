@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Loader2, Sparkles, Star, Trophy, Users } from "lucide-react";
+import { Loader2, LogOut, Sparkles, Star, Trophy, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +12,7 @@ import {
   DrawerTitle,
   DrawerTrigger,
 } from "@/components/ui/drawer";
-import { getParticipant } from "@/lib/participantStore";
+import { getParticipant, clearParticipant } from "@/lib/participantStore";
 import { getParticipantRoute } from "@/lib/sessionRouting";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
@@ -197,6 +197,11 @@ export default function ResultsScreen() {
 
   if (!participant) return null;
 
+  const handleJoinNewSession = () => {
+    clearParticipant();
+    navigate("/");
+  };
+
   if (loading || !session) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -222,7 +227,7 @@ export default function ResultsScreen() {
           </p>
           <p className="text-xs text-muted-foreground">{session.name}</p>
         </motion.div>
-        <div className="mt-6">
+        <div className="mt-6 flex flex-col items-center gap-3">
           <Drawer open={myVotesOpen} onOpenChange={setMyVotesOpen}>
             <DrawerTrigger asChild>
               <Button variant="secondary" size="lg" className="rounded-full shadow-lg px-6">
@@ -259,6 +264,15 @@ export default function ResultsScreen() {
               </div>
             </DrawerContent>
           </Drawer>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full px-5 text-muted-foreground gap-1.5"
+            onClick={handleJoinNewSession}
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            Join a new session
+          </Button>
         </div>
       </div>
     );
@@ -363,7 +377,7 @@ export default function ResultsScreen() {
       </div>
 
       <div className="fixed bottom-4 left-0 right-0 z-40 flex justify-center pointer-events-none">
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto flex items-center gap-2">
           <Drawer open={myVotesOpen} onOpenChange={setMyVotesOpen}>
             <DrawerTrigger asChild>
               <Button
@@ -403,6 +417,15 @@ export default function ResultsScreen() {
               </div>
             </DrawerContent>
           </Drawer>
+          <Button
+            variant="outline"
+            size="lg"
+            className="rounded-full shadow-2xl px-6 gap-1.5 bg-background"
+            onClick={handleJoinNewSession}
+          >
+            <LogOut className="w-4 h-4" />
+            New session
+          </Button>
         </div>
       </div>
     </div>

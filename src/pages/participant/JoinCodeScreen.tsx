@@ -1,18 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Loader2, Zap } from "lucide-react";
+import { ArrowRight, Loader2, Trophy, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { clearParticipant, getParticipant } from "@/lib/participantStore";
 import { getParticipantRoute } from "@/lib/sessionRouting";
 
+interface PreviousSession {
+  sessionName: string;
+}
+
 export default function JoinCodeScreen() {
   const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [restoring, setRestoring] = useState(true);
+  const [previousSession, setPreviousSession] = useState<PreviousSession | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -35,6 +40,15 @@ export default function JoinCodeScreen() {
 
       if (sessionRes.error || participantRes.error || !sessionRes.data || !participantRes.data) {
         clearParticipant();
+        setRestoring(false);
+        return;
+      }
+
+      // If the session is fully revealed (completed), don't auto-redirect.
+      // Show the join form so the user can enter a new code, but keep a
+      // non-intrusive link back to the previous results.
+      if (sessionRes.data.status === "results_revealed") {
+        setPreviousSession({ sessionName: sessionRes.data.name });
         setRestoring(false);
         return;
       }
@@ -71,6 +85,8 @@ export default function JoinCodeScreen() {
       return;
     }
 
+    // Clear any stale participant data from a previous session before joining a new one
+    clearParticipant();
     navigate(`/join/${data.join_code}`);
   };
 
@@ -96,6 +112,26 @@ export default function JoinCodeScreen() {
           </div>
           <span className="font-heading text-xl font-bold">PitchRank</span>
         </div>
+
+        {previousSession && (
+          <div className="w-full rounded-xl border bg-card p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <Trophy className="w-4 h-4 shrink-0 text-amber-500" />
+              <p className="text-sm text-muted-foreground truncate">
+                Previous session: <span className="font-medium text-foreground">{previousSession.sessionName}</span>
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="shrink-0 text-xs gap-1 text-primary"
+              onClick={() => navigate("/results")}
+            >
+              View results
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Button>
+          </div>
+        )}
 
         <div className="text-center space-y-2">
           <h1 className="font-heading text-2xl font-bold">Enter session code</h1>
