@@ -142,9 +142,9 @@ All state changes update the `sessions` row. Supabase Realtime broadcasts to all
 
 | Layer | Choice |
 |-------|--------|
-| Frontend | React + Tailwind (Lovable) |
+| Frontend | React + Tailwind |
 | Backend | Supabase (Postgres + Realtime) |
-| Hosting | Lovable deploy |
+| Hosting | Netlify / any static host |
 
 ---
 
