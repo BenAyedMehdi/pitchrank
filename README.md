@@ -2,8 +2,8 @@
 
 PitchRank is a real-time hackathon evaluation app where an admin creates and runs live judging sessions, participants join with a short code, and everyone scores each pitch across four criteria (technicality, pitch quality, functionality, and innovation). The app uses Supabase Postgres as the backend and Supabase Realtime to sync session state and participant activity across screens during live events, then supports result calculation and reveal at the end of the session.
 
-This project already contains Supabase migrations and frontend integration.
-The steps below move you from Lovable Cloud to your own `supabase.com` project.
+This project contains Supabase migrations and frontend integration.
+The steps below connect the frontend to your own `supabase.com` project.
 
 For product scope and delivery status, see:
 - `CONTEXT.md` (full app context/spec)

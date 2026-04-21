@@ -102,11 +102,13 @@
 |----|-------|----------|------|
 | G9 | When a voter tries to join with a name that already exists in the session, they are shown an error message and asked to enter a different name before proceeding | 🔴 | [x] |
 
-### Voter — Voting view
+### Voter — Session management
 
 | ID | Story | Priority | Done |
 |----|-------|----------|------|
-| G10 | After submitting a vote, a voter can edit their scores for that pitch as long as the admin has not yet closed voting for that team (i.e. the voting session for that pitch is still open) | 🔴 | [x] |
+| H1 | When a participant opens the root URL (/) and has a stored session that is already fully revealed (`results_revealed`), they are shown the join entry form (not auto-redirected) with a non-intrusive banner to view their previous results | 🔴 | [x] |
+| H2 | Participant can join a new session from the results screen ("New session" button) and from the results-coming-soon waiting screen; clicking it clears localStorage and navigates to `/` | 🔴 | [x] |
+| H3 | When a participant enters a new join code while stale participant data exists in localStorage, the stale data is cleared before the new join flow begins | 🔴 | [x] |
 
 ### Admin — Results page
 
@@ -163,7 +165,7 @@
 - **G7** — Team pill badges in the Pitch tab now use a yellow clock icon while ≥1 eligible voter has not yet submitted, and switch to a green checkmark only when every eligible voter has voted for that team
 - **G18** — Story added: admin can manually exclude a voter so their scores are omitted from all team averages
 - **G18** — Implemented: `is_excluded` column added to `participants` table (migration `20260416230000`); admin can toggle exclusion per-voter via `UserX`/`UserCheck` icons in the Pitch tab voter list; excluded voters are dimmed and shown with an "Excluded" badge; `buildTeamResults` now accepts an optional `excludedParticipantIds` set to filter votes; `AdminResultsScreen` derives this set from participants before computing team results; `teamVoteStatus` and `eligibleVoters` counts respect exclusion so the green-tick/yellow-clock badges on team pills update correctly when a missing voter is excluded
-- Added `public/_redirects` so that Netlify/preview deployments serve `index.html` for all client-side routes (e.g. `/admin`, `/admin/sessions`) instead of returning 404
+- **H1/H2/H3** — Session restore UX improved: opening `/` with a stale `results_revealed` session no longer auto-redirects; instead the join form is shown with a "Previous session: [name] · View results →" banner. A "Join a new session" / "New session" button is available on both the results-coming-soon screen and the revealed results screen — it clears `participant_data` from localStorage and navigates to `/`. Entering a new join code also clears stale participant data before proceeding.
 
 ### Earlier phases
 - Connected project to real Supabase (env-based client + migrations pushed)
