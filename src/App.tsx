@@ -4,6 +4,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AdminAuthGuard } from "@/components/AdminAuthGuard";
+import { HelpButton } from "@/components/HelpButton";
 
 import JoinCodeScreen from "./pages/participant/JoinCodeScreen";
 import JoinScreen from "./pages/participant/JoinScreen";
@@ -18,6 +19,7 @@ import AdminLobbyScreen from "./pages/admin/AdminLobbyScreen";
 import AdminPitchScreen from "./pages/admin/AdminPitchScreen";
 import AdminResultsScreen from "./pages/admin/AdminResultsScreen";
 import PublicResultsScreen from "./pages/public/PublicResultsScreen";
+import HelpPage from "./pages/HelpPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +30,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <HelpButton />
         <Routes>
           {/* Participant routes */}
           <Route path="/" element={<JoinCodeScreen />} />
@@ -45,6 +48,9 @@ const App = () => (
           <Route path="/admin/sessions/:id/lobby" element={<AdminAuthGuard><AdminLobbyScreen /></AdminAuthGuard>} />
           <Route path="/admin/sessions/:id/pitch" element={<AdminAuthGuard><AdminPitchScreen /></AdminAuthGuard>} />
           <Route path="/admin/sessions/:id/results" element={<AdminAuthGuard><AdminResultsScreen /></AdminAuthGuard>} />
+
+          {/* Help */}
+          <Route path="/help" element={<HelpPage />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>
