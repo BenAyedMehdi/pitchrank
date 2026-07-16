@@ -132,6 +132,14 @@
 
 ---
 
+## Phase 5 — UX / Onboarding
+
+| ID | Story | Priority | Done |
+|----|-------|----------|------|
+| H4 | A small `?` help button is fixed in the top-right corner of every screen and links to a `/help` page with step-by-step guides for admins and participants | 🟡 | [x] |
+
+---
+
 ## Nice-to-haves (no phase assigned)
 
 | ID | Story | Priority |
