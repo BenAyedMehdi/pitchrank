@@ -109,6 +109,7 @@
 | H1 | When a participant opens the root URL (/) and has a stored session that is already fully revealed (`results_revealed`), they are shown the join entry form (not auto-redirected) with a non-intrusive banner to view their previous results | 🔴 | [x] |
 | H2 | Participant can join a new session from the results screen ("New session" button) and from the results-coming-soon waiting screen; clicking it clears localStorage and navigates to `/` | 🔴 | [x] |
 | H3 | When a participant enters a new join code while stale participant data exists in localStorage, the stale data is cleared before the new join flow begins | 🔴 | [x] |
+| H5 | Participant can go back and change an already submitted vote from the "My Votes" modal: each vote row has a pencil icon that switches the row into an inline 1–5 editor with Save / Cancel; changes are persisted to `votes.criteria_scores`. Editing is allowed while the session is `active` or `voting_closed` and is locked once results are revealed | 🔴 | [x] |
 
 ### Admin — Results page
 

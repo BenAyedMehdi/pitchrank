@@ -4,24 +4,19 @@ import { motion } from "framer-motion";
 import { Loader2, LogOut, Sparkles, Star, Trophy, Users } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import {
-  Drawer,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer";
+import { MyVotesDrawer } from "@/components/MyVotesDrawer";
 import { getParticipant, clearParticipant } from "@/lib/participantStore";
 import { getParticipantRoute } from "@/lib/sessionRouting";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { buildParticipantVoteSummaries } from "@/lib/participantVotes";
+import { applyVoteScoresUpdate, canEditSubmittedVotes } from "@/lib/voteEditing";
 import {
   buildCriteriaDisplayLabels,
   getAllCategoryKeys,
 } from "@/lib/results";
 import { normalizeCriteriaLabels } from "@/lib/voting";
+import { toast } from "sonner";
 
 export default function ResultsScreen() {
   const navigate = useNavigate();
@@ -171,6 +166,25 @@ export default function ResultsScreen() {
     return buildParticipantVoteSummaries(votes, participant.id, teams, criteriaDisplayLabels);
   }, [criteriaDisplayLabels, participant, teams, votes]);
 
+  const canEditVotes = canEditSubmittedVotes(session?.status);
+
+  const handleSaveVote = async (voteId: string, criteriaScores: number[]) => {
+    const { error } = await supabase
+      .from("votes")
+      .update({ criteria_scores: criteriaScores })
+      .eq("id", voteId);
+
+    if (error) {
+      console.error("Failed to update vote:", error);
+      toast.error(error.message || "Failed to update vote");
+      return false;
+    }
+
+    setVotes((previous) => applyVoteScoresUpdate(previous, voteId, criteriaScores));
+    toast.success("Vote updated");
+    return true;
+  };
+
   useEffect(() => {
     if (!session) return;
     if (!isRevealed) {
@@ -228,42 +242,19 @@ export default function ResultsScreen() {
           <p className="text-xs text-muted-foreground">{session.name}</p>
         </motion.div>
         <div className="mt-6 flex flex-col items-center gap-3">
-          <Drawer open={myVotesOpen} onOpenChange={setMyVotesOpen}>
-            <DrawerTrigger asChild>
+          <MyVotesDrawer
+            open={myVotesOpen}
+            onOpenChange={setMyVotesOpen}
+            summaries={myVoteSummaries}
+            editable={canEditVotes}
+            onSaveVote={handleSaveVote}
+            trigger={
               <Button variant="secondary" size="lg" className="rounded-full shadow-lg px-6">
                 <Star className="w-4 h-4" />
                 My Votes ({myVoteSummaries.length})
               </Button>
-            </DrawerTrigger>
-            <DrawerContent className="max-h-[82vh]">
-              <DrawerHeader>
-                <DrawerTitle>My Submitted Votes</DrawerTitle>
-                <DrawerDescription>These are only your own ratings.</DrawerDescription>
-              </DrawerHeader>
-              <div className="px-4 pb-6 overflow-y-auto space-y-3">
-                {myVoteSummaries.length === 0 ? (
-                  <Card className="p-4 text-sm text-muted-foreground">You have not submitted any votes yet.</Card>
-                ) : (
-                  myVoteSummaries.map((vote) => (
-                    <Card key={vote.voteId} className="p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-semibold">{vote.teamName}</h4>
-                        <span className="text-sm font-semibold text-primary">{vote.totalScore} pts</span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {vote.criteriaScores.map((item) => (
-                          <div key={`${vote.voteId}-${item.label}`} className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">{item.label}</span>
-                            <span className="font-medium">{item.score}/5</span>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </DrawerContent>
-          </Drawer>
+            }
+          />
           <Button
             variant="outline"
             size="sm"
@@ -378,8 +369,13 @@ export default function ResultsScreen() {
 
       <div className="fixed bottom-4 left-0 right-0 z-40 flex justify-center pointer-events-none">
         <div className="pointer-events-auto flex items-center gap-2">
-          <Drawer open={myVotesOpen} onOpenChange={setMyVotesOpen}>
-            <DrawerTrigger asChild>
+          <MyVotesDrawer
+            open={myVotesOpen}
+            onOpenChange={setMyVotesOpen}
+            summaries={myVoteSummaries}
+            editable={canEditVotes}
+            onSaveVote={handleSaveVote}
+            trigger={
               <Button
                 size="lg"
                 className="rounded-full shadow-2xl px-6 bg-primary text-primary-foreground"
@@ -387,36 +383,8 @@ export default function ResultsScreen() {
                 <Star className="w-4 h-4" />
                 My Votes ({myVoteSummaries.length})
               </Button>
-            </DrawerTrigger>
-            <DrawerContent className="max-h-[82vh]">
-              <DrawerHeader>
-                <DrawerTitle>My Submitted Votes</DrawerTitle>
-                <DrawerDescription>These are only your own ratings.</DrawerDescription>
-              </DrawerHeader>
-              <div className="px-4 pb-6 overflow-y-auto space-y-3">
-                {myVoteSummaries.length === 0 ? (
-                  <Card className="p-4 text-sm text-muted-foreground">You have not submitted any votes yet.</Card>
-                ) : (
-                  myVoteSummaries.map((vote) => (
-                    <Card key={vote.voteId} className="p-4 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-semibold">{vote.teamName}</h4>
-                        <span className="text-sm font-semibold text-primary">{vote.totalScore} pts</span>
-                      </div>
-                      <div className="space-y-1.5">
-                        {vote.criteriaScores.map((item) => (
-                          <div key={`${vote.voteId}-${item.label}`} className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">{item.label}</span>
-                            <span className="font-medium">{item.score}/5</span>
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-                  ))
-                )}
-              </div>
-            </DrawerContent>
-          </Drawer>
+            }
+          />
           <Button
             variant="outline"
             size="lg"
