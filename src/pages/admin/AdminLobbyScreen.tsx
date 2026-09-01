@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Users, Clock, Loader2 } from "lucide-react";
+import { Users, Clock, Loader2, Crown } from "lucide-react";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
 import { JoinCodeDisplay } from "@/components/JoinCodeDisplay";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,6 +14,7 @@ interface ParticipantWithTeam {
   id: string;
   name: string;
   teamName: string;
+  isUseCaseOwner: boolean;
   joined_at: string;
 }
 
@@ -42,6 +43,7 @@ export default function AdminLobbyScreen() {
             id: p.id,
             name: p.name,
             teamName: p.is_observer ? "Observer" : (p.teams?.name ?? "No team"),
+            isUseCaseOwner: Boolean(p.is_use_case_owner),
             joined_at: p.joined_at,
           }))
         );
@@ -74,7 +76,13 @@ export default function AdminLobbyScreen() {
             teamName = team?.name ?? "No team";
           }
           setParticipants((prev) => [
-            { id: newP.id, name: newP.name, teamName, joined_at: newP.joined_at },
+            {
+              id: newP.id,
+              name: newP.name,
+              teamName,
+              isUseCaseOwner: Boolean(newP.is_use_case_owner),
+              joined_at: newP.joined_at,
+            },
             ...prev,
           ]);
         }
@@ -158,6 +166,12 @@ export default function AdminLobbyScreen() {
                   <div>
                     <p className="text-sm font-medium">{p.name}</p>
                     <p className="text-xs text-muted-foreground">{p.teamName}</p>
+                    {p.isUseCaseOwner ? (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                        <Crown className="w-3 h-3" />
+                        Use case owner · 2x on own project
+                      </span>
+                    ) : null}
                   </div>
                 </div>
                 <span className="flex items-center gap-1 text-xs text-muted-foreground">

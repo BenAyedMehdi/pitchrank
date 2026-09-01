@@ -10,6 +10,7 @@ import {
   getAllCategoryKeys,
 } from "@/lib/results";
 import { normalizeCriteriaLabels } from "@/lib/voting";
+import { isUseCaseOwner } from "@/lib/participantRoles";
 
 export default function PublicResultsScreen() {
   const { id } = useParams<{ id: string }>();
@@ -74,7 +75,7 @@ export default function PublicResultsScreen() {
   const membersByTeamId = useMemo(() => {
     const map = new Map<string, string[]>();
     participants.forEach((p) => {
-      if (!p.team_id || p.is_observer) return;
+      if (!p.team_id || p.is_observer || isUseCaseOwner(p)) return;
       const list = map.get(p.team_id) ?? [];
       list.push(p.name);
       map.set(p.team_id, list);

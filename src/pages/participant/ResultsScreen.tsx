@@ -11,6 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 import { buildParticipantVoteSummaries } from "@/lib/participantVotes";
 import { applyVoteScoresUpdate, canEditSubmittedVotes } from "@/lib/voteEditing";
+import { isUseCaseOwner } from "@/lib/participantRoles";
 import {
   buildCriteriaDisplayLabels,
   getAllCategoryKeys,
@@ -129,7 +130,7 @@ export default function ResultsScreen() {
   const membersByTeamId = useMemo(() => {
     const map = new Map<string, string[]>();
     participants.forEach((p) => {
-      if (!p.team_id || p.is_observer) return;
+      if (!p.team_id || p.is_observer || isUseCaseOwner(p)) return;
       const list = map.get(p.team_id) ?? [];
       list.push(p.name);
       map.set(p.team_id, list);

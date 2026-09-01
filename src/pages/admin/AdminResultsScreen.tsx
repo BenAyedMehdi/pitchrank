@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Award, CheckCircle2, Download, Loader2, Save, Trophy, Users } from "lucide-react";
+import { Award, CheckCircle2, Crown, Download, Loader2, Save, Trophy, Users } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Cell, LabelList, XAxis, YAxis } from "recharts";
 import { AdminSessionLayout } from "@/components/AdminSessionLayout";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -22,6 +22,10 @@ import {
   type ResultsCategoryKey,
 } from "@/lib/results";
 import { buildCategoryCsvExports } from "@/lib/resultsExport";
+import {
+  buildVoteWeightResolver,
+  isUseCaseOwner,
+} from "@/lib/participantRoles";
 import { normalizeCriteriaLabels } from "@/lib/voting";
 import { cn } from "@/lib/utils";
 import { buildPublicResultsUrl } from "@/lib/resultsLink";
@@ -113,9 +117,13 @@ export default function AdminResultsScreen() {
     () => new Set(participants.filter((p) => p.is_excluded).map((p) => p.id)),
     [participants],
   );
+  const voteWeightResolver = useMemo(
+    () => buildVoteWeightResolver(participants),
+    [participants],
+  );
   const teamResults = useMemo(
-    () => buildTeamResults(teams, votes, criteriaDisplayLabels, excludedParticipantIds),
-    [criteriaDisplayLabels, excludedParticipantIds, teams, votes],
+    () => buildTeamResults(teams, votes, criteriaDisplayLabels, excludedParticipantIds, voteWeightResolver),
+    [criteriaDisplayLabels, excludedParticipantIds, teams, votes, voteWeightResolver],
   );
   const sortedResults = useMemo(() => sortTeamResultsByOverall(teamResults), [teamResults]);
   const categories = useMemo(
@@ -129,7 +137,7 @@ export default function AdminResultsScreen() {
   const membersByTeamId = useMemo(() => {
     const map = new Map<string, string[]>();
     participants.forEach((p) => {
-      if (!p.team_id || p.is_observer) return;
+      if (!p.team_id || p.is_observer || isUseCaseOwner(p)) return;
       const list = map.get(p.team_id) ?? [];
       list.push(p.name);
       map.set(p.team_id, list);
@@ -308,6 +316,7 @@ export default function AdminResultsScreen() {
         teamResults,
         votes,
         participantNameById,
+        voteWeightResolver,
       });
 
       exports.forEach((file, index) => {
@@ -706,6 +715,7 @@ export default function AdminResultsScreen() {
                     return {
                       voteId: vote.id,
                       voterName: participantNameById.get(vote.participant_id) ?? "Unknown voter",
+                      voteWeight: voteWeightResolver(vote.participant_id, vote.team_id),
                       categoryScore,
                     };
                   })
@@ -817,7 +827,15 @@ export default function AdminResultsScreen() {
                                 <div className="space-y-1.5">
                                   {selectedTeamVotes.map((row) => (
                                     <div key={row.voteId} className="flex items-center justify-between text-sm">
-                                      <span>{row.voterName}</span>
+                                      <span className="flex items-center gap-1.5">
+                                        {row.voterName}
+                                        {row.voteWeight > 1 ? (
+                                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-900">
+                                            <Crown className="w-2.5 h-2.5" />
+                                            {row.voteWeight}x
+                                          </span>
+                                        ) : null}
+                                      </span>
                                       <span className="font-semibold tabular-nums">{formatScore(row.categoryScore)}</span>
                                     </div>
                                   ))}

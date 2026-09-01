@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Zap } from "lucide-react";
+import { Zap, Crown } from "lucide-react";
 import { getParticipant } from "@/lib/participantStore";
 import { getParticipantRoute } from "@/lib/sessionRouting";
 import { shouldRouteToVote } from "@/lib/voteRouting";
@@ -121,6 +121,12 @@ export default function LobbyScreen() {
 
         <div className="space-y-2">
           <h1 className="font-heading text-2xl font-bold">You're in, {participant.name}!</h1>
+          {participant.isUseCaseOwner ? (
+            <p className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+              <Crown className="w-3.5 h-3.5" />
+              Use case owner · 2x on your own project
+            </p>
+          ) : null}
           <p className="text-muted-foreground">
             {lastVotedTeamName
               ? `You voted for ${lastVotedTeamName}. Wait until the admin starts the next voting session.`

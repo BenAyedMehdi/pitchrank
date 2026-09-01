@@ -1,5 +1,6 @@
 import type { Tables } from "@/integrations/supabase/types";
 import type { TeamResult, ResultsCategory, ResultsCategoryKey } from "@/lib/results";
+import { resolveVoteWeight, type VoteWeightResolver } from "@/lib/participantRoles";
 
 export interface CategoryCsvExport {
   filename: string;
@@ -12,6 +13,7 @@ type BuildCategoryCsvExportsInput = {
   teamResults: TeamResult[];
   votes: Tables<"votes">[];
   participantNameById: Map<string, string>;
+  voteWeightResolver?: VoteWeightResolver;
 };
 
 function csvEscape(value: string | number): string {
@@ -44,11 +46,13 @@ function buildCategoryCsv({
   teamResults,
   votes,
   participantNameById,
+  voteWeightResolver,
 }: {
   category: ResultsCategory;
   teamResults: TeamResult[];
   votes: Tables<"votes">[];
   participantNameById: Map<string, string>;
+  voteWeightResolver?: VoteWeightResolver;
 }): string {
   const rows: string[] = [];
 
@@ -76,7 +80,7 @@ function buildCategoryCsv({
 
   rows.push("");
   rows.push("Voters");
-  rows.push("Team,Voter,Category Score,Total Vote,Submitted At");
+  rows.push("Team,Voter,Category Score,Total Vote,Vote Weight,Submitted At");
 
   const votersRows = [...votes]
     .map((vote) => ({
@@ -84,6 +88,7 @@ function buildCategoryCsv({
       voterName: participantNameById.get(vote.participant_id) ?? "Unknown voter",
       categoryScore: voteScoreForCategory(vote, category.key),
       totalVote: vote.criteria_scores.reduce((sum, score) => sum + score, 0),
+      weight: resolveVoteWeight(vote.participant_id, vote.team_id, voteWeightResolver),
     }))
     .sort((a, b) => {
       const teamCompare = a.vote.team_id.localeCompare(b.vote.team_id);
@@ -100,6 +105,7 @@ function buildCategoryCsv({
         csvEscape(row.voterName),
         csvEscape(row.categoryScore),
         csvEscape(row.totalVote),
+        csvEscape(row.weight),
         csvEscape(row.vote.submitted_at),
       ].join(","),
     );
@@ -114,6 +120,7 @@ export function buildCategoryCsvExports({
   teamResults,
   votes,
   participantNameById,
+  voteWeightResolver,
 }: BuildCategoryCsvExportsInput): CategoryCsvExport[] {
   const sessionPart = normalizeFilenamePart(sessionName);
 
@@ -126,6 +133,7 @@ export function buildCategoryCsvExports({
         teamResults,
         votes,
         participantNameById,
+        voteWeightResolver,
       }),
     };
   });

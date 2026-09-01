@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Loader2 } from "lucide-react";
+import { Loader2, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { getParticipant } from "@/lib/participantStore";
@@ -133,7 +133,17 @@ export default function VoteScreen() {
   }, [session, teams]);
   const criteriaLabels = normalizeCriteriaLabels(session?.criteria_labels);
   const criteriaDisplayLabels = criteriaLabels.map((label, index) => (label.length > 0 ? label : `Criteria ${index + 1}`));
-  const isOwnTeamPitch = !!participant && !!currentPitch && !participant.isObserver && participant.teamId === currentPitch.id;
+  const isOwnTeamPitch =
+    !!participant &&
+    !!currentPitch &&
+    !participant.isObserver &&
+    !participant.isUseCaseOwner &&
+    participant.teamId === currentPitch.id;
+  const isOwnUseCasePitch =
+    !!participant &&
+    !!currentPitch &&
+    Boolean(participant.isUseCaseOwner) &&
+    participant.teamId === currentPitch.id;
   const hasExistingVote = Boolean(existingVoteId);
   const canSubmit = isCompleteVote(scores, criteriaLabels.length) && !isOwnTeamPitch && !submitting;
   const timerRemaining = session ? getSessionTimerRemaining(session, nowMs) : 0;
@@ -251,6 +261,14 @@ export default function VoteScreen() {
           <p className="text-muted-foreground">
             {currentPitch ? `Now pitching: ${currentPitch.name}` : "Pitch in progress"}
           </p>
+          {participant.isUseCaseOwner ? (
+            <p className="inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
+              <Crown className="w-3.5 h-3.5" />
+              {isOwnUseCasePitch
+                ? "Your use case · this vote counts 2x"
+                : "Use case owner · this vote counts 1x"}
+            </p>
+          ) : null}
           {timerRunning ? (
             <p className="text-sm font-semibold text-primary">
               {timerPaused ? `Timer paused at ${timerRemaining}s` : `Time left: ${timerRemaining}s`}

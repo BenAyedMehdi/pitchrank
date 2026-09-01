@@ -19,6 +19,7 @@ export type Database = {
           id: string
           is_excluded: boolean
           is_observer: boolean
+          is_use_case_owner: boolean
           joined_at: string
           name: string
           session_id: string
@@ -28,6 +29,7 @@ export type Database = {
           id?: string
           is_excluded?: boolean
           is_observer?: boolean
+          is_use_case_owner?: boolean
           joined_at?: string
           name: string
           session_id: string
@@ -37,6 +39,7 @@ export type Database = {
           id?: string
           is_excluded?: boolean
           is_observer?: boolean
+          is_use_case_owner?: boolean
           joined_at?: string
           name?: string
           session_id?: string

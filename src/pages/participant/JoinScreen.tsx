@@ -12,6 +12,14 @@ import {
   sanitizeParticipantName,
 } from "@/lib/participantName";
 import { setParticipant } from "@/lib/participantStore";
+import {
+  buildParticipantRoleInsert,
+  getRoleDescription,
+  getRoleLabel,
+  requiresTeamSelection,
+  type ParticipantRole,
+} from "@/lib/participantRoles";
+import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 
@@ -19,6 +27,7 @@ export default function JoinScreen() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const [name, setName] = useState("");
+  const [role, setRole] = useState<ParticipantRole>("participant");
   const [teamId, setTeamId] = useState("");
   const [session, setSession] = useState<Tables<"sessions"> | null>(null);
   const [teams, setTeams] = useState<Tables<"teams">[]>([]);
@@ -55,8 +64,11 @@ export default function JoinScreen() {
     load();
   }, [code, navigate]);
 
+  const needsTeam = requiresTeamSelection(role);
+  const canEnter = Boolean(name.trim()) && (!needsTeam || Boolean(teamId));
+
   const handleEnter = async () => {
-    if (!name.trim() || !teamId || !session) return;
+    if (!canEnter || !session) return;
     const sanitizedName = sanitizeParticipantName(name);
     const normalizedName = normalizeParticipantName(sanitizedName);
     if (!normalizedName) return;
@@ -84,15 +96,12 @@ export default function JoinScreen() {
       return;
     }
 
-    const isObserver = teamId === "observer";
-
     const { data, error } = await supabase
       .from("participants")
       .insert({
         session_id: session.id,
         name: sanitizedName,
-        team_id: isObserver ? null : teamId,
-        is_observer: isObserver,
+        ...buildParticipantRoleInsert(role, teamId || null),
       })
       .select()
       .single();
@@ -109,6 +118,7 @@ export default function JoinScreen() {
       name: data.name,
       teamId: data.team_id,
       isObserver: data.is_observer,
+      isUseCaseOwner: data.is_use_case_owner,
       sessionId: data.session_id,
       sessionName: session.name,
     });
@@ -159,37 +169,65 @@ export default function JoinScreen() {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Your team</label>
+            <label className="text-sm font-medium">Your role</label>
             <div className="space-y-2">
-              {teams.map((team) => (
+              {(["participant", "use_case_owner", "observer"] as ParticipantRole[]).map((option) => (
                 <button
-                  key={team.id}
-                  onClick={() => setTeamId(team.id)}
-                  className={`w-full text-left px-4 py-3 rounded-xl border transition-all text-sm ${
-                    teamId === team.id
+                  key={option}
+                  onClick={() => {
+                    setRole(option);
+                    if (!requiresTeamSelection(option)) setTeamId("");
+                  }}
+                  className={cn(
+                    "w-full text-left px-4 py-3 rounded-xl border transition-all text-sm",
+                    role === option
                       ? "border-primary bg-primary/5 text-foreground font-medium"
-                      : "border-border bg-card text-muted-foreground hover:border-primary/30"
-                  }`}
+                      : "border-border bg-card text-muted-foreground hover:border-primary/30",
+                  )}
                 >
-                  {team.name}
+                  <span className="flex items-center gap-2">
+                    {getRoleLabel(option)}
+                    {option === "use_case_owner" ? (
+                      <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900">
+                        Own project counts 2x
+                      </span>
+                    ) : null}
+                  </span>
+                  <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                    {getRoleDescription(option)}
+                  </span>
                 </button>
               ))}
-              <button
-                onClick={() => setTeamId("observer")}
-                className={`w-full text-left px-4 py-3 rounded-xl border transition-all text-sm ${
-                  teamId === "observer"
-                    ? "border-primary bg-primary/5 text-foreground font-medium"
-                    : "border-border bg-card text-muted-foreground hover:border-primary/30"
-                }`}
-              >
-                I am not a participant (organiser / mentor)
-              </button>
             </div>
           </div>
 
+          {needsTeam ? (
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                {role === "use_case_owner" ? "Your project" : "Your team"}
+              </label>
+              <div className="space-y-2">
+                {teams.map((team) => (
+                  <button
+                    key={team.id}
+                    onClick={() => setTeamId(team.id)}
+                    className={cn(
+                      "w-full text-left px-4 py-3 rounded-xl border transition-all text-sm",
+                      teamId === team.id
+                        ? "border-primary bg-primary/5 text-foreground font-medium"
+                        : "border-border bg-card text-muted-foreground hover:border-primary/30",
+                    )}
+                  >
+                    {team.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           <Button
             onClick={handleEnter}
-            disabled={!name.trim() || !teamId || submitting}
+            disabled={!canEnter || submitting}
             className="w-full h-12 text-base font-semibold"
             size="lg"
           >
