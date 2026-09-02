@@ -2,12 +2,11 @@ import type { ParticipantVoteSummary } from "@/lib/participantVotes";
 import { isCompleteVote } from "@/lib/voting";
 
 /**
- * Submitted votes stay editable until the admin has revealed the results.
- * Once results are revealed the scores are final.
+ * Submitted votes stay editable only while the session is open (`active`).
+ * As soon as the admin closes the voting the scores are final.
  */
 export function canEditSubmittedVotes(status: string | null | undefined): boolean {
-  if (!status) return false;
-  return status === "active" || status === "voting_closed";
+  return status === "active";
 }
 
 /** Turns a vote summary into the mutable score draft used by the inline editor. */

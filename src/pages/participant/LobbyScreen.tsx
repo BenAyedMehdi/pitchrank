@@ -1,11 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Zap, Crown } from "lucide-react";
+import { Zap, Crown, Star } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { MyVotesDrawer } from "@/components/MyVotesDrawer";
 import { getParticipant } from "@/lib/participantStore";
 import { getParticipantRoute } from "@/lib/sessionRouting";
 import { shouldRouteToVote } from "@/lib/voteRouting";
 import { consumeLastVotedTeam } from "@/lib/voteFlash";
+import { buildParticipantVoteSummaries } from "@/lib/participantVotes";
+import { applyVoteScoresUpdate, canEditSubmittedVotes } from "@/lib/voteEditing";
+import { buildCriteriaDisplayLabels } from "@/lib/results";
+import { normalizeCriteriaLabels } from "@/lib/voting";
 import { supabase } from "@/integrations/supabase/client";
 import type { Tables } from "@/integrations/supabase/types";
 
@@ -13,6 +20,11 @@ export default function LobbyScreen() {
   const navigate = useNavigate();
   const [participant] = useState(() => getParticipant());
   const [sessionName, setSessionName] = useState(participant?.sessionName || "");
+  const [sessionStatus, setSessionStatus] = useState<string | null>(null);
+  const [criteriaLabelsRaw, setCriteriaLabelsRaw] = useState<string[] | null>(null);
+  const [teams, setTeams] = useState<Tables<"teams">[]>([]);
+  const [myVotes, setMyVotes] = useState<Tables<"votes">[]>([]);
+  const [myVotesOpen, setMyVotesOpen] = useState(false);
   const teamsRef = useRef<Tables<"teams">[]>([]);
   const [lastVotedTeamName] = useState<string | null>(() => consumeLastVotedTeam());
 
@@ -52,19 +64,28 @@ export default function LobbyScreen() {
     };
 
     const syncSession = async () => {
-      const [sessionRes, teamsRes] = await Promise.all([
+      const [sessionRes, teamsRes, votesRes] = await Promise.all([
         supabase
           .from("sessions")
           .select("*")
           .eq("id", participant.sessionId)
           .single(),
         supabase.from("teams").select("*").eq("session_id", participant.sessionId).order("pitch_order"),
+        supabase
+          .from("votes")
+          .select("*")
+          .eq("session_id", participant.sessionId)
+          .eq("participant_id", participant.id),
       ]);
 
       if (!sessionRes.data) return;
 
       setSessionName(sessionRes.data.name);
+      setSessionStatus(sessionRes.data.status);
+      setCriteriaLabelsRaw(sessionRes.data.criteria_labels);
       teamsRef.current = teamsRes.data || [];
+      setTeams(teamsRes.data || []);
+      setMyVotes(votesRes.data || []);
 
       const nextRoute = getParticipantRoute(sessionRes.data);
       const votedForCurrentPitch = await hasVotedForCurrentPitch(sessionRes.data);
@@ -105,6 +126,35 @@ export default function LobbyScreen() {
     };
   }, [navigate, participant?.id, participant?.sessionId]);
 
+  const criteriaDisplayLabels = useMemo(
+    () => buildCriteriaDisplayLabels(normalizeCriteriaLabels(criteriaLabelsRaw), myVotes),
+    [criteriaLabelsRaw, myVotes],
+  );
+
+  const myVoteSummaries = useMemo(() => {
+    if (!participant) return [];
+    return buildParticipantVoteSummaries(myVotes, participant.id, teams, criteriaDisplayLabels);
+  }, [criteriaDisplayLabels, myVotes, participant, teams]);
+
+  const canEditVotes = canEditSubmittedVotes(sessionStatus);
+
+  const handleSaveVote = async (voteId: string, criteriaScores: number[]) => {
+    const { error } = await supabase
+      .from("votes")
+      .update({ criteria_scores: criteriaScores })
+      .eq("id", voteId);
+
+    if (error) {
+      console.error("Failed to update vote:", error);
+      toast.error(error.message || "Failed to update vote");
+      return false;
+    }
+
+    setMyVotes((previous) => applyVoteScoresUpdate(previous, voteId, criteriaScores));
+    toast.success("Vote updated");
+    return true;
+  };
+
   if (!participant) return null;
 
   return (
@@ -138,6 +188,20 @@ export default function LobbyScreen() {
           <span className="w-2.5 h-2.5 rounded-full bg-success animate-pulse-dot" />
           {sessionName}
         </div>
+
+        <MyVotesDrawer
+          open={myVotesOpen}
+          onOpenChange={setMyVotesOpen}
+          summaries={myVoteSummaries}
+          editable={canEditVotes}
+          onSaveVote={handleSaveVote}
+          trigger={
+            <Button variant="secondary" size="lg" className="rounded-full shadow-lg px-6">
+              <Star className="w-4 h-4" />
+              My Votes ({myVoteSummaries.length})
+            </Button>
+          }
+        />
 
         <p className="text-xs text-muted-foreground/60 mt-8">
           Sit tight — the host will start the session shortly.

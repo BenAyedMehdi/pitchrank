@@ -189,7 +189,7 @@ export function MyVotesDrawer({
           <DrawerDescription>
             {editable
               ? "These are only your own ratings. Tap the pencil to change a vote."
-              : "These are only your own ratings. Results are revealed, so votes are final."}
+              : "These are only your own ratings. Voting is closed, so votes are final."}
           </DrawerDescription>
         </DrawerHeader>
         <div className="px-4 pb-6 overflow-y-auto space-y-3">

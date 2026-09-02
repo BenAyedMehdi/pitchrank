@@ -23,12 +23,12 @@ const summary: ParticipantVoteSummary = {
 };
 
 describe("canEditSubmittedVotes", () => {
-  it("allows editing while the session is active or voting is closed", () => {
+  it("allows editing only while the session is active", () => {
     expect(canEditSubmittedVotes("active")).toBe(true);
-    expect(canEditSubmittedVotes("voting_closed")).toBe(true);
   });
 
-  it("blocks editing once results are revealed or status is unknown", () => {
+  it("blocks editing once voting is closed, results are revealed or status is unknown", () => {
+    expect(canEditSubmittedVotes("voting_closed")).toBe(false);
     expect(canEditSubmittedVotes("results_revealed")).toBe(false);
     expect(canEditSubmittedVotes("setup")).toBe(false);
     expect(canEditSubmittedVotes(null)).toBe(false);
