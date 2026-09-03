@@ -4,6 +4,7 @@ export interface ParticipantData {
   name: string;
   teamId: string | null;
   isObserver: boolean;
+  isUseCaseOwner?: boolean;
   sessionId: string;
   sessionName: string;
 }

@@ -109,6 +109,8 @@
 | H1 | When a participant opens the root URL (/) and has a stored session that is already fully revealed (`results_revealed`), they are shown the join entry form (not auto-redirected) with a non-intrusive banner to view their previous results | 🔴 | [x] |
 | H2 | Participant can join a new session from the results screen ("New session" button) and from the results-coming-soon waiting screen; clicking it clears localStorage and navigates to `/` | 🔴 | [x] |
 | H3 | When a participant enters a new join code while stale participant data exists in localStorage, the stale data is cleared before the new join flow begins | 🔴 | [x] |
+| H5 | Participant can go back and change an already submitted vote from the "My Votes" modal: each vote row has a pencil icon that switches the row into an inline 1–5 editor with Save / Cancel; changes are persisted to `votes.criteria_scores`. Editing is allowed while the session is `active` or `voting_closed` and is locked once results are revealed | 🔴 | [x] |
+| H6 | New participant type **Use case owner**, selectable on the join screen alongside "Team member" and "Observer". A use case owner picks the project they own and votes on **every** team, including their own. Their score counts **2x only for their own project**; on every other team their vote has normal weight. The role is highlighted with a crown badge on the join screen, participant lobby/vote screens, admin lobby, admin pitch voter list, admin results voter breakdown, and gets a `Vote Weight` column in the CSV export | 🔴 | [x] |
 
 ### Admin — Results page
 

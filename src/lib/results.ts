@@ -1,4 +1,5 @@
 import type { Tables } from "@/integrations/supabase/types";
+import { resolveVoteWeight, type VoteWeightResolver } from "@/lib/participantRoles";
 
 export const OVERALL_CATEGORY_KEY = "overall";
 const TOP_TEAMS_PER_CATEGORY = 5;
@@ -9,6 +10,8 @@ export interface TeamResult {
   teamId: string;
   teamName: string;
   voteCount: number;
+  /** Sum of the vote weights counted for this team (use case owners count as 2). */
+  weightedVoteCount: number;
   criterionAverages: number[];
   overall: number;
 }
@@ -24,6 +27,13 @@ export interface ResultsCategory {
 function average(values: number[]): number {
   if (values.length === 0) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+export function weightedAverage(entries: Array<{ value: number; weight: number }>): number {
+  const usable = entries.filter((entry) => entry.weight > 0);
+  const totalWeight = usable.reduce((sum, entry) => sum + entry.weight, 0);
+  if (totalWeight === 0) return 0;
+  return usable.reduce((sum, entry) => sum + entry.value * entry.weight, 0) / totalWeight;
 }
 
 export function formatScore(score: number): string {
@@ -47,6 +57,7 @@ export function buildTeamResults(
   votes: Tables<"votes">[],
   criteriaDisplayLabels: string[],
   excludedParticipantIds?: Set<string>,
+  voteWeightResolver?: VoteWeightResolver,
 ): TeamResult[] {
   return teams.map((team) => {
     const teamVotes = votes
@@ -54,15 +65,22 @@ export function buildTeamResults(
       .filter((vote) => !excludedParticipantIds?.has(vote.participant_id));
     const criterionAverages = criteriaDisplayLabels.map((_, criterionIndex) => {
       const criterionScores = teamVotes
-        .map((vote) => vote.criteria_scores?.[criterionIndex])
-        .filter((value): value is number => typeof value === "number");
-      return average(criterionScores);
+        .map((vote) => ({
+          value: vote.criteria_scores?.[criterionIndex],
+          weight: resolveVoteWeight(vote.participant_id, vote.team_id, voteWeightResolver),
+        }))
+        .filter((entry): entry is { value: number; weight: number } => typeof entry.value === "number");
+      return weightedAverage(criterionScores);
     });
 
     return {
       teamId: team.id,
       teamName: team.name,
       voteCount: teamVotes.length,
+      weightedVoteCount: teamVotes.reduce(
+        (sum, vote) => sum + resolveVoteWeight(vote.participant_id, vote.team_id, voteWeightResolver),
+        0,
+      ),
       criterionAverages,
       overall: average(criterionAverages),
     };

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Tables } from "@/integrations/supabase/types";
 import { buildCategoryCsvExports } from "./resultsExport";
+import { buildVoteWeightResolver } from "./participantRoles";
 import type { ResultsCategory, TeamResult } from "./results";
 
 describe("buildCategoryCsvExports", () => {
@@ -9,6 +10,7 @@ describe("buildCategoryCsvExports", () => {
       teamId: "t1",
       teamName: "Alpha",
       voteCount: 2,
+      weightedVoteCount: 3,
       criterionAverages: [4.5, 3.5],
       overall: 8,
     },
@@ -16,6 +18,7 @@ describe("buildCategoryCsvExports", () => {
       teamId: "t2",
       teamName: "Beta",
       voteCount: 2,
+      weightedVoteCount: 2,
       criterionAverages: [3.5, 4.5],
       overall: 8,
     },
@@ -93,6 +96,58 @@ describe("buildCategoryCsvExports", () => {
     expect(content).toContain("Alpha");
     expect(content).toContain("Ada");
     expect(content).toContain("Category Score");
+  });
+
+  it("includes the vote weight column, defaulting to 1", () => {
+    const [overall] = buildCategoryCsvExports({
+      sessionName: "Hackathon Finals",
+      categories,
+      teamResults,
+      votes,
+      participantNameById,
+    });
+
+    expect(overall.content).toContain("Vote Weight");
+    expect(overall.content).toContain("Alpha,Ada,8,8,1,");
+  });
+
+  it("writes the use case owner weight only for the project they own", () => {
+    // Ada owns team t1, so her vote on t1 is 2x; Bob is an ordinary voter.
+    const voteWeightResolver = buildVoteWeightResolver([
+      { id: "p1", team_id: "t1", is_use_case_owner: true },
+      { id: "p2", team_id: "t2" },
+    ]);
+
+    const [overall] = buildCategoryCsvExports({
+      sessionName: "Hackathon Finals",
+      categories,
+      teamResults,
+      votes,
+      participantNameById,
+      voteWeightResolver,
+    });
+
+    expect(overall.content).toContain("Alpha,Ada,8,8,2,");
+    expect(overall.content).toContain("Beta,Bob,8,8,1,");
+  });
+
+  it("keeps the use case owner weight at 1 on a project they do not own", () => {
+    const voteWeightResolver = buildVoteWeightResolver([
+      { id: "p1", team_id: "t2", is_use_case_owner: true },
+      { id: "p2", team_id: "t1" },
+    ]);
+
+    const [overall] = buildCategoryCsvExports({
+      sessionName: "Hackathon Finals",
+      categories,
+      teamResults,
+      votes,
+      participantNameById,
+      voteWeightResolver,
+    });
+
+    // Ada voted for Alpha (t1) but owns Beta (t2) -> weight stays 1
+    expect(overall.content).toContain("Alpha,Ada,8,8,1,");
   });
 });
 

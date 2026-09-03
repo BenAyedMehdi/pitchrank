@@ -17,6 +17,7 @@ import {
   Plus,
   UserX,
   UserCheck,
+  Crown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,11 @@ import { AdminSessionLayout } from "@/components/AdminSessionLayout";
 import { cn } from "@/lib/utils";
 import { getSessionTimerRemaining, isTimerPaused } from "@/lib/timer";
 import { supabase } from "@/integrations/supabase/client";
+import {
+  getVoteWeightForTeam,
+  isBlockedFromVotingForTeam,
+  isUseCaseOwner,
+} from "@/lib/participantRoles";
 import type { Tables } from "@/integrations/supabase/types";
 import { toast } from "sonner";
 
@@ -159,7 +165,9 @@ export default function AdminPitchScreen() {
         : typeof p.teams?.name === "string" && p.teams.name.trim().length > 0
           ? p.teams.name
           : "No team",
-      isTeamMember: Boolean(trackedTeam && !p.is_observer && p.team_id === trackedTeam.id),
+      isTeamMember: Boolean(trackedTeam && isBlockedFromVotingForTeam(p, trackedTeam.id)),
+      isUseCaseOwner: isUseCaseOwner(p),
+      voteWeight: trackedTeam ? getVoteWeightForTeam(p, trackedTeam.id) : 1,
       voted: votedIds.has(p.id),
       isExcluded: Boolean(p.is_excluded),
     }));
@@ -179,6 +187,7 @@ export default function AdminPitchScreen() {
   const percentage = totalVoters === 0 ? 0 : Math.round((votedCount / totalVoters) * 100);
   const teamMemberCount = allVoterRows.filter((v) => v.isTeamMember).length;
   const excludedCount = allVoterRows.filter((v) => !v.isTeamMember && v.isExcluded).length;
+  const useCaseOwnerCount = allVoterRows.filter((v) => v.isUseCaseOwner && !v.isExcluded).length;
 
   const teamsWithStartedVoting = useMemo(() => {
     const ids = new Set(votes.map((vote) => vote.team_id));
@@ -195,7 +204,7 @@ export default function AdminPitchScreen() {
 
       const teamVotedIds = new Set(votes.filter((v) => v.team_id === teamId).map((v) => v.participant_id));
       const eligible = participants.filter(
-        (p) => !p.is_excluded && (p.is_observer || p.team_id !== team.id),
+        (p) => !p.is_excluded && !isBlockedFromVotingForTeam(p, team.id),
       );
       const allVoted = eligible.length > 0 && eligible.every((p) => teamVotedIds.has(p.id));
       result.set(teamId, allVoted ? "all-voted" : "in-progress");
@@ -597,6 +606,12 @@ export default function AdminPitchScreen() {
                     {excludedCount} voter{excludedCount > 1 ? "s" : ""} manually excluded: scores omitted from all averages
                   </div>
                 ) : null}
+                {useCaseOwnerCount > 0 ? (
+                  <div className="flex items-center gap-1.5 text-[10px] text-amber-700">
+                    <Crown className="h-3 w-3" />
+                    {useCaseOwnerCount} use case owner{useCaseOwnerCount > 1 ? "s" : ""}: they vote on every team, but their score counts 2x only for their own project
+                  </div>
+                ) : null}
                 <Progress value={percentage} className="h-2" />
                 <p className="text-right text-[10px] text-muted-foreground">{percentage}%</p>
               </div>
@@ -634,6 +649,12 @@ export default function AdminPitchScreen() {
                       <div>
                         <p className="text-xs font-medium leading-tight">{voter.name}</p>
                         <p className="text-[10px] text-muted-foreground">{voter.team}</p>
+                        {voter.isUseCaseOwner ? (
+                          <span className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-100 px-1.5 py-0.5 text-[9px] font-semibold text-amber-900">
+                            <Crown className="h-2.5 w-2.5" />
+                            Use case owner · {voter.voteWeight}x here
+                          </span>
+                        ) : null}
                       </div>
                     </div>
 
